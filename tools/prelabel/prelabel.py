@@ -11,8 +11,10 @@ Per frame the JSON holds (all coordinates normalised to the frame, so any resolu
              front runs off-screen
   quad_norm  the outline reduced to 4 corners [TL, TR, BR, BL], only when it is not clipped
   clipped    the outline touches the picture edge (true corners are off-screen)
+  box_fill   how well the mask fills the region the detector found (1 = fully)
+  solidity   outline area / hull area (near 1 = one solid piece; low = leak or fragments)
   iou        overlap of quad_norm with poly_norm (1 = the 4-corner fit is the outline)
-  auto_ok    unclipped, quad fits the outline well and OWL is confident: safe to accept without a look
+  auto_ok    detector confident, mask fills its box and, for a complete front, the quad fits the outline
 """
 import argparse, json, os
 import cv2, numpy as np, torch
@@ -23,7 +25,9 @@ QUERY = "a black framed glass door"
 MIN_SCORE = 0.30      # OWLv2 confidence for a pane
 SIBLING = 0.6         # also keep panes scoring at least this fraction of the best one
 MODEL_W = 720         # frames are resized to this width for the models
-OK_OWL, OK_IOU = 0.35, 0.95   # auto_ok: OWL confidence and overlap of the 4-corner fit with the mask outline
+OK_OWL, OK_IOU, OK_FILL, OK_SOLID, MIN_SOLID = 0.35, 0.95, 0.85, 0.90, 0.60
+# auto_ok: OWL confidence, mask fills its box, mask is one solid piece, 4-corner fit matches the outline;
+# proposals below MIN_SOLID are dropped as junk
 
 dev = "mps" if torch.backends.mps.is_available() else "cpu"
 
@@ -54,9 +58,23 @@ def panes(m, im):
     return [(sc, b) for sc, b in got if sum(inside(o, b) for _, o in got if o is not b) < 2]
 
 
+def add_rim(mask, gray, iters=22, dark=95):
+    """SAM's mask stops at the inside of the black frame. Grow it outward over dark pixels only, so it
+    reaches the frame's outer edge without spilling onto the white body or the floor."""
+    dark_px = (gray < dark).astype(np.uint8)
+    k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    cur = mask.copy()
+    for _ in range(iters):
+        cur = np.maximum(mask, cv2.dilate(cur, k) & (dark_px | mask))
+    return cur
+
+
 def segment(m, im, box):
-    """SAM proposes three nested masks for a box; take the one whose bounding box best fills the box, so
-    a pair of panes gives the whole front (frame included) rather than one pane."""
+    """-> (mask, box_fill) for the front inside `box`, or (None, 0).
+
+    SAM proposes nested masks for a box. The right one is the largest that stays inside the (slightly
+    expanded) box: it covers both panes, whereas a smaller one leaves part of the front out and its hull
+    then cuts a diagonal. box_fill is how well the final mask's bounding box fills the box."""
     sam_p, sam = m[2], m[3]
     bw, bh = box[2] - box[0], box[3] - box[1]
     box = [max(0, box[0] - 0.03 * bw), max(0, box[1] - 0.02 * bh), min(im.width, box[2] + 0.03 * bw), min(im.height, box[3] + 0.02 * bh)]
@@ -64,21 +82,27 @@ def segment(m, im, box):
     with torch.no_grad():
         out = sam(**inp, multimask_output=True)
     masks = sam_p.post_process_masks(out.pred_masks.cpu(), inp["original_sizes"].cpu())[0][0]  # (3, H, W)
-    best, best_s = None, -1.0
-    for mk, pred in zip(masks, out.iou_scores.cpu().reshape(-1).tolist()):
+    x0, y0, x1, y1 = [int(round(v)) for v in box]
+    best = None
+    for mk in masks:
         mk = (mk.numpy() > 0).astype(np.uint8)
-        ys, xs = np.nonzero(mk)
-        if not len(xs):
+        area = int(mk.sum())
+        if area < 50 or mk[y0:y1, x0:x1].sum() / area < 0.97:
             continue
-        ix = max(0, min(xs.max(), box[2]) - max(xs.min(), box[0])); iy = max(0, min(ys.max(), box[3]) - max(ys.min(), box[1]))
-        inter = ix * iy
-        union = (xs.max() - xs.min()) * (ys.max() - ys.min()) + (box[2] - box[0]) * (box[3] - box[1]) - inter
-        score = inter / union + 0.05 * pred
-        if score > best_s:
-            best, best_s = mk, score
+        if best is None or area > best[0]:
+            best = (area, mk)
     if best is None:
-        return np.zeros((im.height, im.width), np.uint8)
-    return cv2.morphologyEx(best, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))  # drop thin leaks
+        return None, 0.0
+    mask = cv2.morphologyEx(best[1], cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))  # drop thin leaks
+    gray = cv2.GaussianBlur(cv2.cvtColor(np.array(im), cv2.COLOR_RGB2GRAY), (5, 5), 0)
+    mask = add_rim(mask, gray)
+    ys, xs = np.nonzero(mask)
+    if not len(xs):
+        return None, 0.0
+    ix = max(0, min(xs.max(), box[2]) - max(xs.min(), box[0])); iy = max(0, min(ys.max(), box[3]) - max(ys.min(), box[1]))
+    inter = ix * iy
+    union = (xs.max() - xs.min()) * (ys.max() - ys.min()) + (box[2] - box[0]) * (box[3] - box[1]) - inter
+    return mask, float(inter / union) if union else 0.0
 
 
 def reduce_to_quad(poly):
@@ -115,7 +139,8 @@ def reduce_to_quad(poly):
 
 
 def outline(mask):
-    """-> (poly Nx2, quad 4x2 or None, fill, clipped)"""
+    """-> (poly Nx2, quad 4x2 or None, solidity, clipped); solidity = outline area / hull area, low when
+    the mask has a leak or is in pieces"""
     cs, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cs:
         return None, None, 0.0, False
@@ -126,8 +151,8 @@ def outline(mask):
     h, w = mask.shape
     clipped = bool((poly[:, 0] <= 2).any() or (poly[:, 1] <= 2).any() or (poly[:, 0] >= w - 3).any() or (poly[:, 1] >= h - 3).any())
     quad = reduce_to_quad(poly) if len(poly) >= 4 and not clipped else None
-    fill = 0.0
-    return poly, quad, float(fill), clipped
+    solidity = cv2.contourArea(c) / max(1.0, cv2.contourArea(hull))
+    return poly, quad, float(solidity), clipped
 
 
 def iou(poly_norm, quad_norm, n=400):
@@ -140,19 +165,18 @@ def iou(poly_norm, quad_norm, n=400):
 
 
 def rescore(path):
+    """Recompute quad, iou and auto_ok from the saved outlines (no model run)."""
     j = json.load(open(path))
     wh = np.array([j["video"]["width"], j["video"]["height"]], float)
     for r in j["frames"]:
-        r["iou"] = r["auto_ok"] = None
-        r.pop("fill", None)
+        r["iou"] = None
         if r["poly_norm"] and not r["clipped"]:
             q = reduce_to_quad(np.array(r["poly_norm"]) * wh)
             r["quad_norm"] = None if q is None else (q / wh).round(5).tolist()
-        if r["quad_norm"] and r["poly_norm"]:
-            r["iou"] = round(iou(r["poly_norm"], r["quad_norm"]), 3)
-            r["auto_ok"] = bool(r["owl"] >= OK_OWL and r["iou"] >= OK_IOU)
-        else:
-            r["auto_ok"] = False
+            if r["quad_norm"]:
+                r["iou"] = round(iou(r["poly_norm"], r["quad_norm"]), 3)
+        r["auto_ok"] = bool(r["poly_norm"] and r["owl"] >= OK_OWL and (r.get("box_fill") or 0) >= OK_FILL
+                            and (r.get("solidity") or 0) >= OK_SOLID and (r["clipped"] or (r["iou"] or 0) >= OK_IOU))
     json.dump(j, open(path, "w"), indent=1)
     print(f"rescored {path}: {sum(r['auto_ok'] for r in j['frames'])} auto_ok of {len(j['frames'])} frames")
 
@@ -191,21 +215,24 @@ def main():
     recs, tiles = [], []
     for t, im, (W, H) in frames(a.video, a.step):
         w, h = im.size
-        rec = {"t": round(t, 3), "owl": None, "iou": None, "clipped": None, "auto_ok": False, "quad_norm": None, "poly_norm": None}
+        rec = {"t": round(t, 3), "owl": None, "box_fill": None, "solidity": None, "iou": None, "clipped": None, "auto_ok": False, "quad_norm": None, "poly_norm": None}
         pn = panes(m, im)
         if pn:
             box = [max(0, min(b[0] for _, b in pn)), max(0, min(b[1] for _, b in pn)),
                    min(w, max(b[2] for _, b in pn)), min(h, max(b[3] for _, b in pn))]
-            poly, quad, _, clipped = outline(segment(m, im, box))
-            rec.update(owl=round(pn[0][0], 3), clipped=clipped)
-            if poly is not None:
+            mask, fill = segment(m, im, box)
+            poly, quad, solid, clipped = outline(mask) if mask is not None else (None, None, 0.0, False)
+            rec.update(owl=round(pn[0][0], 3), clipped=clipped, box_fill=round(fill, 3), solidity=round(solid, 3))
+            if poly is not None and solid >= MIN_SOLID:
                 rec["poly_norm"] = (poly / [w, h]).round(5).tolist()
                 if quad is not None and not clipped:
                     rec["quad_norm"] = (quad / [w, h]).round(5).tolist()
                     rec["iou"] = round(iou(rec["poly_norm"], rec["quad_norm"]), 3)
-                    rec["auto_ok"] = bool(pn[0][0] >= OK_OWL and rec["iou"] >= OK_IOU)
+                # confident = a well-supported detection whose mask fills its box, and, when the front is
+                # complete, whose 4-corner fit matches the outline
+                rec["auto_ok"] = bool(pn[0][0] >= OK_OWL and fill >= OK_FILL and solid >= OK_SOLID and (clipped or rec["iou"] >= OK_IOU))
         recs.append(rec)
-        print(f"t={t:6.2f} owl={rec['owl']} iou={rec['iou']} clipped={rec['clipped']} ok={rec['auto_ok']}", flush=True)
+        print(f"t={t:6.2f} owl={rec['owl']} fill={rec['box_fill']} solid={rec['solidity']} iou={rec['iou']} clipped={rec['clipped']} ok={rec['auto_ok']}", flush=True)
         if a.sheet:
             d = ImageDraw.Draw(im)
             if rec["poly_norm"]:

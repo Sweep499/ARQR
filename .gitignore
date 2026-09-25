@@ -1,3 +1,4 @@
 dev/
 dataset/
 video/
+__pycache__/

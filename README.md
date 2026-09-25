@@ -32,8 +32,9 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r tools
 
 Then open `tools/label.html`, load the same video, set "Sample every" to the `--step` you used, and use
 "Import proposals". Purple frames are proposals: `A` / Enter accepts and jumps to the next, `X` rejects.
-"Accept confident" takes every `auto_ok` proposal (complete, unclipped front that fits a quad well) at once,
-but `auto_ok` is not reliable yet (a few show a diagonal leak or only one pane), so look before using it.
+"Accept confident" takes every `auto_ok` proposal at once (detector confident, mask fills its box, one solid
+piece). On the two sample videos every confident outline I checked wrapped the whole front frame, but skim the
+contact sheet (`--sheet`) first: green = confident, magenta = needs a look.
 Fronts that run off the picture edge come as outlines only; they are valid segmentation masks but have no
 corners. Expect to reject the close-ups where only part of a pane is found.
 
