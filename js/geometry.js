@@ -79,3 +79,11 @@ export function quadInView(q, w, h) {
   }
   return false;
 }
+
+// Inverse of a row-major 3x3 homography (adjugate / determinant).
+export function invertH(H) {
+  const [a, b, c, d, e, f, g, h, i] = H;
+  const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+  const det = a * A + b * B + c * C;
+  return [A, -(b * i - c * h), b * f - c * e, B, a * i - c * g, -(a * f - c * d), C, -(a * h - b * g), a * e - b * d].map((v) => v / det);
+}

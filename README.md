@@ -75,9 +75,25 @@ corners. Expect to reject the close-ups where only part of a pane is found.
    (quads in pixels and normalised, plus `corners_inside` and `visible_frac` for filtering) to a folder.
    "Export JSON" writes only the labels. Labels autosave in the browser and can be re-imported.
 
+## Place the feature dots
+
+`tools/hotspots.html` (serve the folder as below, open `http://localhost:8765/tools/hotspots.html`) sets the
+numbered dots without measuring anything by hand:
+
+1. "Open photo or video" with a straight-on picture of the pod front, standing back so the whole front is in
+   view. For a video, use the slider to pick a frame.
+2. The outline is found automatically. If the whole front is not in view it says so; click the four corners
+   instead (top-left, top-right, bottom-right, bottom-left) and drag them to fine-tune.
+3. The list starts with what is in `data/pod.json`. Select a feature (or "+ Add feature"), then click its spot
+   on the picture. Fill in its title, popup text and link on the right. Drag a dot to move it; "grid" shows
+   the front frame divided into tenths.
+4. "Download pod.json" (or "Copy JSON"), replace `data/pod.json` with it, and push.
+
+The list autosaves in the browser. Dots follow the outline if you move a corner, so set the outline first.
+
 ## Edit the features
 
-Open `data/pod.json`. Each hotspot has:
+You can edit `data/pod.json` by hand, or use the placement page above. Each hotspot has:
 
 | field | meaning |
 |---|---|
