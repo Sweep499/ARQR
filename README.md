@@ -1,0 +1,50 @@
+# Pod feature guide (web AR)
+
+Scan a QR code, allow the camera, point it at a pod, and tap numbered dots to see what each part
+is and open its feature page. Runs entirely in the browser as a static site, so it works on GitHub Pages.
+
+## Status
+
+Version 0. What works:
+
+- Camera view (rear camera on phones) with permission prompt
+- Pod outline placed by tapping the four corners of the pod's front frame once, then followed as the
+  phone moves (optical flow via OpenCV.js). Corners can be dragged to fine-tune.
+- Numbered feature dots pinned to the outline; tapping one opens a popup with a description and an
+  "Open feature page" link
+- All features are listed in `data/pod.json`
+
+What is planned: a trained detector that finds the pod's four corners automatically, replacing the
+tap-to-place step and cancelling tracking drift.
+
+## Edit the features
+
+Open `data/pod.json`. Each hotspot has:
+
+| field | meaning |
+|---|---|
+| `title`, `text` | shown in the popup |
+| `url` | opened by the "Open feature page" button (opens in a new tab; many sites block embedding) |
+| `x`, `y` | position on the pod's front frame: `x` 0 = left edge, 1 = right edge; `y` 0 = top, 1 = bottom |
+
+The `example.com` links are placeholders.
+
+## Run locally
+
+Camera access needs `https` or `localhost`:
+
+```
+python -m http.server 8765
+```
+
+then open http://localhost:8765/. To test on a PC without a camera, put a video in `dev/` and open
+`http://localhost:8765/?src=dev/demo.mp4`.
+
+## Publish
+
+1. Create a GitHub repository and push this folder.
+2. Settings, Pages, deploy from branch `main`, folder `/ (root)`.
+3. The site is served at `https://<user>.github.io/<repo>/`, which is https, so the camera prompt works.
+4. Make a QR code for that URL and print it next to the pod.
+
+`dev/`, `dataset/` and `video/` are git-ignored, so raw showroom footage is not published.

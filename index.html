@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111111">
+  <title>Pod Feature Guide</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <section id="start">
+    <h1>Pod feature guide</h1>
+    <p>Point your camera at the pod to see what it is made of and where the features are.</p>
+    <button id="startBtn" type="button">Start camera</button>
+    <p id="error" role="alert" hidden></p>
+    <small>The camera image stays on your device. Nothing is uploaded.</small>
+  </section>
+
+  <main id="stage" hidden>
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="overlay"></canvas>
+    <div id="hotspots"></div>
+
+    <div id="hint" role="status"></div>
+    <div class="toolbar">
+      <button id="resetBtn" type="button">Re-place pod</button>
+    </div>
+
+    <aside id="sheet" hidden aria-live="polite">
+      <button id="sheetClose" type="button" aria-label="Close">&times;</button>
+      <h2 id="sheetTitle"></h2>
+      <p id="sheetText"></p>
+      <a id="sheetLink" target="_blank" rel="noopener">Open feature page &#8599;</a>
+    </aside>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
