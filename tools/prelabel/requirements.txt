@@ -1,0 +1,7 @@
+torch
+torchvision
+transformers>=5.0
+pillow
+numpy
+opencv-python-headless
+accelerate

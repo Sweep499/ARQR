@@ -3,6 +3,8 @@
 // from the previous key, backward from the next key, blended), then export quads, images and masks.
 //
 // Quads are [TL, TR, BR, BL] in video pixels and may lie outside the picture.
+// Proposals from tools/prelabel/prelabel.py show up as purple 'prop' frames to accept (A) or reject (X);
+// a proposal may carry only an outline (`poly`, clipped by the picture edge) and no quad.
 
 import { applyScaledH, isSaneQuad } from '../js/geometry.js';
 import { loadOpenCV, FlowTracker } from '../js/tracker.js';
@@ -19,10 +21,11 @@ const MAX_OUT = 1.0;        // propagation stops when a corner strays more than 
 const MAX_ONE_SIDED = 10;   // frames tracked from a single key (no second key to check against) before giving up
 const HANDLE = 14;          // css px within which a click grabs a corner
 const CORNERS = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
-const COLORS = { key: '#ffb400', ok: '#3ecf8e', warn: '#ff6b4a', unv: '#5ea1ff', none: '#777' };
+const COLORS = { key: '#ffb400', ok: '#3ecf8e', warn: '#ff6b4a', unv: '#5ea1ff', none: '#777', prop: '#c86bff' };
 
-// labels[i] is null (unlabelled) or { kind: 'key' | 'auto' | 'none', quad, err }
-//   key  = placed by hand; none = hand-marked "no pod front"; auto = propagated
+// labels[i] is null (unlabelled) or { kind: 'key' | 'auto' | 'none' | 'prop', quad, poly, err, ok }
+//   key  = placed by hand or accepted proposal; none = hand-marked "no pod front"; auto = propagated
+//   prop = unreviewed proposal (ok = the pre-labeller was confident); poly = outline when there is no quad
 //   err  = max corner disagreement (video px) between forward and backward tracking, null if only one side
 const S = {
   step: 0.2, n: 0, cur: 0, labels: [], placing: [], drag: -1,
@@ -65,13 +68,13 @@ function save() {
 }
 function keyList() {
   const out = [];
-  S.labels.forEach((l, i) => { if (l && l.kind !== 'auto') out.push({ t: timeOf(i), quad: l.kind === 'none' ? null : l.quad }); });
+  S.labels.forEach((l, i) => { if (l && l.kind !== 'auto') out.push({ t: timeOf(i), quad: l.kind === 'none' ? null : l.quad, ...(l.poly ? { poly: l.poly } : {}) }); });
   return out;
 }
 function applyKeys(keys) {
   for (const k of keys) {
     const i = Math.min(S.n - 1, Math.max(0, Math.round(k.t / S.step)));
-    S.labels[i] = k.quad ? { kind: 'key', quad: k.quad, err: null } : { kind: 'none', quad: null, err: null };
+    S.labels[i] = k.quad || k.poly ? { kind: 'key', quad: k.quad || null, poly: k.poly || null, err: null } : { kind: 'none', quad: null, err: null };
   }
 }
 function resetLabels() {
@@ -98,7 +101,7 @@ $('importFile').addEventListener('change', async (e) => {
   if (!f || !S.n) return;
   try {
     const j = JSON.parse(await f.text());
-    const keys = j.keys || (j.frames || []).filter((fr) => fr.kind !== 'auto').map((fr) => ({ t: fr.t, quad: fr.quad_px }));
+    const keys = j.keys || (j.frames || []).filter((fr) => fr.kind !== 'auto').map((fr) => ({ t: fr.t, quad: fr.quad_px, poly: fr.poly_px }));
     applyKeys(keys);
     save();
     draw(); drawTimeline();
@@ -142,6 +145,7 @@ const toVideo = (x, y, L = layout()) => [(x - L.ox) / L.s, (y - L.oy) / L.s];
 
 function labelColor(l, warnPx) {
   if (l.kind === 'key') return COLORS.key;
+  if (l.kind === 'prop') return COLORS.prop;
   if (l.kind === 'none') return COLORS.none;
   if (l.err == null) return COLORS.unv;
   return l.err > warnPx ? COLORS.warn : COLORS.ok;
@@ -165,7 +169,8 @@ function draw() {
   ctx.strokeRect(L.ox, L.oy, L.vw * L.s, L.vh * L.s);
 
   const l = S.labels[S.cur];
-  if (l && l.quad) drawQuad(l.quad.map((p) => toScreen(p, L)), labelColor(l, warnPx()), l.kind === 'auto');
+  if (l && l.quad) drawQuad(l.quad.map((p) => toScreen(p, L)), labelColor(l, warnPx()), l.kind === 'auto' || l.kind === 'prop');
+  else if (l && l.poly) drawOutline(l.poly.map((p) => toScreen(p, L)), labelColor(l, warnPx()), l.kind === 'prop');
   if (l && l.kind === 'none') {
     ctx.fillStyle = 'rgba(0,0,0,.55)';
     ctx.fillRect(L.ox, L.oy, L.vw * L.s, L.vh * L.s);
@@ -195,6 +200,15 @@ function drawQuad(sq, color, dashed) {
   sq.forEach(([x, y], i) => handle(x, y, i, color));
 }
 
+function drawOutline(sp, color, dashed) {
+  ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.strokeStyle = color;
+  ctx.setLineDash(dashed ? [8, 5] : []);
+  ctx.beginPath();
+  sp.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.closePath(); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
 function handle(x, y, i, color) {
   ctx.fillStyle = color;
   ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
@@ -220,7 +234,7 @@ function drawTimeline() {
   S.labels.forEach((l, i) => {
     if (!l) return;
     tctx.fillStyle = labelColor(l, wp);
-    tctx.fillRect(i * cw, l.kind === 'auto' ? 8 : 2, Math.max(1, cw - (cw > 3 ? 1 : 0)), l.kind === 'auto' ? h - 16 : h - 4);
+    tctx.fillRect(i * cw, l.kind === 'auto' || l.kind === 'prop' ? 8 : 2, Math.max(1, cw - (cw > 3 ? 1 : 0)), l.kind === 'auto' || l.kind === 'prop' ? h - 16 : h - 4);
   });
   tctx.fillStyle = '#fff';
   tctx.fillRect(S.cur * cw + cw / 2 - 1, 0, 2, h);
@@ -230,13 +244,15 @@ function updateStatus() {
   const l = S.labels[S.cur];
   let what = 'unlabelled';
   if (S.placing.length) what = `placing: click the ${CORNERS[S.placing.length]} corner (${S.placing.length + 1} of 4)`;
+  else if (l?.kind === 'prop') what = `proposal${l.ok ? ' (confident)' : ''}: A accept, X reject${l.quad ? ', or drag a corner' : ''}`;
   else if (l?.kind === 'key') what = 'key';
   else if (l?.kind === 'none') what = 'no pod front';
   else if (l?.kind === 'auto') what = l.err == null ? 'propagated, unverified' : `propagated, disagreement ${l.err.toFixed(0)} px`;
   else what = 'unlabelled: click the top-left corner';
-  const keys = S.labels.filter((x) => x && x.kind !== 'auto').length;
+  const keys = S.labels.filter((x) => x && x.kind !== 'auto' && x.kind !== 'prop').length;
   const autos = S.labels.filter((x) => x?.kind === 'auto').length;
-  setStatus(`frame ${S.cur + 1}/${S.n} · t=${timeOf(S.cur).toFixed(2)}s · ${what} · ${keys} keys, ${autos} propagated` + (S.note ? ` · ${S.note}` : ''));
+  const props = S.labels.filter((x) => x?.kind === 'prop').length;
+  setStatus(`frame ${S.cur + 1}/${S.n} · t=${timeOf(S.cur).toFixed(2)}s · ${what} · ${keys} keys, ${autos} propagated${props ? `, ${props} to review` : ''}` + (S.note ? ` · ${S.note}` : ''));
 }
 function setStatus(t) { $('status').textContent = t; }
 
@@ -264,11 +280,11 @@ view.addEventListener('pointerdown', (e) => {
       S.drag = best;
       view.setPointerCapture(e.pointerId);
       // editing a propagated frame turns it into a key
-      if (l.kind === 'auto') { l.kind = 'key'; l.err = null; }
+      if (l.kind === 'auto' || l.kind === 'prop') { l.kind = 'key'; l.err = null; l.poly = null; save(); }
     }
     return;
   }
-  if (l?.kind === 'none') return;
+  if (l?.kind === 'none' || l?.poly) return; // outline-only frames: accept, reject or Clear
   S.placing.push(toVideo(x, y, L));
   if (S.placing.length === 4) {
     S.labels[S.cur] = { kind: 'key', quad: S.placing, err: null };
@@ -291,6 +307,7 @@ $('none').addEventListener('click', markNone);
 $('clear').addEventListener('click', clearFrame);
 function markNone() {
   if (S.busy) return;
+  if (S.labels[S.cur]?.kind === 'prop') { rejectProposal(); return; }
   S.labels[S.cur] = S.labels[S.cur]?.kind === 'none' ? null : { kind: 'none', quad: null, err: null };
   S.placing = [];
   save(); draw(); drawTimeline();
@@ -301,6 +318,57 @@ function clearFrame() {
   S.placing = [];
   save(); draw(); drawTimeline();
 }
+
+// ---------- reviewing proposals ----------
+
+$('propFile').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f || !S.n) return;
+  try {
+    const j = JSON.parse(await f.text());
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const px = (pts) => pts.map(([x, y]) => [x * vw, y * vh]);
+    let added = 0;
+    for (const fr of j.frames || []) {
+      const i = Math.min(S.n - 1, Math.max(0, Math.round(fr.t / S.step)));
+      if (S.labels[i] || !fr.poly_norm) continue; // never overwrite a hand label
+      S.labels[i] = { kind: 'prop', quad: fr.quad_norm ? px(fr.quad_norm) : null, poly: fr.quad_norm ? null : px(fr.poly_norm), err: null, ok: !!fr.auto_ok };
+      added++;
+    }
+    $('acceptOk').disabled = false;
+    const first = S.labels.findIndex((l) => l?.kind === 'prop');
+    await gotoFrame(first >= 0 ? first : S.cur);
+    S.note = `${added} proposals imported`;
+    draw();
+  } catch (err) { setStatus('Could not read that proposals file: ' + err.message); }
+});
+
+function nextProposal(from) {
+  for (let i = from + 1; i < S.n; i++) if (S.labels[i]?.kind === 'prop') return gotoFrame(i);
+  for (let i = 0; i < from; i++) if (S.labels[i]?.kind === 'prop') return gotoFrame(i);
+  draw(); drawTimeline();
+  return Promise.resolve();
+}
+function acceptProposal() {
+  const l = S.labels[S.cur];
+  if (S.busy || l?.kind !== 'prop') return;
+  l.kind = 'key';
+  save();
+  nextProposal(S.cur);
+}
+function rejectProposal() {
+  if (S.busy || S.labels[S.cur]?.kind !== 'prop') return;
+  S.labels[S.cur] = null;
+  nextProposal(S.cur);
+}
+$('acceptOk').addEventListener('click', () => {
+  if (S.busy) return;
+  let n = 0;
+  for (const l of S.labels) if (l?.kind === 'prop' && l.ok) { l.kind = 'key'; n++; }
+  save();
+  nextProposal(-1).then(() => { S.note = `accepted ${n} confident proposals`; draw(); });
+});
 
 timeline.addEventListener('pointerdown', (e) => {
   if (S.busy || !S.n) return;
@@ -317,11 +385,14 @@ window.addEventListener('keydown', (e) => {
   else if (k === ']' || k === '[') {
     const dir = k === ']' ? 1 : -1;
     for (let i = S.cur + dir; i >= 0 && i < S.n; i += dir) {
-      if (S.labels[i] && S.labels[i].kind !== 'auto') { gotoFrame(i); break; }
+      if (S.labels[i] && S.labels[i].kind !== 'auto' && S.labels[i].kind !== 'prop') { gotoFrame(i); break; }
     }
   } else if (k === 'n' || k === 'N') markNone();
   else if (k === 'Delete') clearFrame();
   else if (k === 'p' || k === 'P') propagate();
+  else if (k === 'a' || k === 'A' || k === 'Enter') acceptProposal();
+  else if (k === 'x' || k === 'X') rejectProposal();
+  else if (k === 'u' || k === 'U') nextProposal(S.cur);
   else if (k === 'Escape') { S.placing = []; draw(); }
   else if (k === 'Backspace') { S.placing.pop(); draw(); }
   else return;
@@ -336,7 +407,7 @@ $('stop').addEventListener('click', () => { S.abort = true; });
 function setBusy(b) {
   S.busy = b;
   S.abort = false;
-  for (const id of ['propagate', 'exportJson', 'exportDir', 'none', 'clear', 'file', 'importFile', 'step']) $(id).disabled = b;
+  for (const id of ['propagate', 'exportJson', 'exportDir', 'none', 'clear', 'file', 'importFile', 'propFile', 'step']) $(id).disabled = b;
   $('stop').disabled = !b;
 }
 
@@ -370,7 +441,7 @@ async function trackRun(from, to, quad, maxFrames = Infinity) {
 async function propagate() {
   if (S.busy || !S.n) return;
   const keys = [];
-  S.labels.forEach((l, i) => { if (l && l.kind !== 'auto') keys.push(i); });
+  S.labels.forEach((l, i) => { if (l && l.kind !== 'auto' && l.kind !== 'prop') keys.push(i); });
   if (!keys.some((i) => S.labels[i].quad)) { setStatus('Place at least one key first.'); return; }
   setBusy(true);
   const restore = S.cur;
@@ -378,7 +449,7 @@ async function propagate() {
     setStatus('loading OpenCV…');
     if (!S.tracker) S.tracker = new FlowTracker((await loadOpenCV()).cv);
     S.labels = S.labels.map((l) => (l && l.kind === 'auto' ? null : l));
-    const put = (i, quad, err) => { S.labels[i] = { kind: 'auto', quad, err }; };
+    const put = (i, quad, err) => { if (S.labels[i]?.kind !== 'prop') S.labels[i] = { kind: 'auto', quad, err }; }; // keep unreviewed proposals
     const quadAt = (i) => S.labels[i].quad;
 
     // head: backward from the first key; tail: forward from the last key (one-sided, so unverified)
@@ -445,7 +516,7 @@ function exportRecords(includeUnverified) {
   const vw = video.videoWidth, vh = video.videoHeight, wp = warnPx();
   const recs = [];
   S.labels.forEach((l, i) => {
-    if (!l) return;
+    if (!l || l.kind === 'prop') return;
     if (l.kind === 'auto' && (l.err == null ? !includeUnverified : l.err > wp)) return;
     const rec = { i, t: +timeOf(i).toFixed(4), kind: l.kind, err_px: l.err == null ? null : +l.err.toFixed(1) };
     if (l.quad) {
@@ -458,6 +529,13 @@ function exportRecords(includeUnverified) {
         visible_frac: +(clipped.length ? area(clipped) / area(l.quad) : 0).toFixed(3),
       });
     } else rec.quad_px = null;
+    if (l.poly) {
+      Object.assign(rec, {
+        poly_px: l.poly.map((p) => p.map((v) => +v.toFixed(1))),
+        poly_norm: l.poly.map(([x, y]) => [+(x / vw).toFixed(5), +(y / vh).toFixed(5)]),
+        clipped: true,
+      });
+    }
     recs.push(rec);
   });
   return recs;
@@ -519,10 +597,11 @@ $('exportDir').addEventListener('click', async () => {
       await writeFile(imgDir, name + '.jpg', await toBlob(c, 'image/jpeg', 0.92));
       x.fillStyle = '#000';
       x.fillRect(0, 0, W, H);
-      if (r.quad_px) {
+      const outline = r.poly_px || r.quad_px;
+      if (outline) {
         x.fillStyle = '#fff';
         x.beginPath();
-        r.quad_px.forEach(([px, py], j) => (j ? x.lineTo(px * k, py * k) : x.moveTo(px * k, py * k)));
+        outline.forEach(([px, py], j) => (j ? x.lineTo(px * k, py * k) : x.moveTo(px * k, py * k)));
         x.closePath(); x.fill();
       }
       await writeFile(maskDir, name + '.png', await toBlob(c, 'image/png'));

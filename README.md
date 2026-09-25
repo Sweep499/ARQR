@@ -19,6 +19,26 @@ tap-to-place step and cancelling tracking drift.
 
 ## Label pod fronts (training data for the detector)
 
+### Pre-label automatically (no clicking)
+
+`tools/prelabel/prelabel.py` finds the pod front with two pretrained models (OWLv2 for "black framed glass
+door", SAM 2.1 for the outline) and writes `<video>.proposals.json`. Both download from Hugging Face on first
+run, no login needed; Apple silicon uses the GPU.
+
+```
+uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r tools/prelabel/requirements.txt
+.venv/bin/python tools/prelabel/prelabel.py dataset/IMG_2822.MOV --step 0.5 --sheet
+```
+
+Then open `tools/label.html`, load the same video, set "Sample every" to the `--step` you used, and use
+"Import proposals". Purple frames are proposals: `A` / Enter accepts and jumps to the next, `X` rejects.
+"Accept confident" takes every `auto_ok` proposal (complete, unclipped front that fits a quad well) at once,
+but `auto_ok` is not reliable yet (a few show a diagonal leak or only one pane), so look before using it.
+Fronts that run off the picture edge come as outlines only; they are valid segmentation masks but have no
+corners. Expect to reject the close-ups where only part of a pane is found.
+
+### Label by hand
+
 `tools/label.html` is a standalone labelling page. Serve the folder as above, open
 `http://localhost:8765/tools/label.html`, and pick a video with "Open video" (Chrome, Edge or Brave).
 

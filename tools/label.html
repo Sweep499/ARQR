@@ -33,6 +33,8 @@
     <div class="grp">
       <label class="btn">Open video<input id="file" type="file" accept="video/*" hidden></label>
       <label class="btn">Import labels<input id="importFile" type="file" accept="application/json" hidden></label>
+      <label class="btn">Import proposals<input id="propFile" type="file" accept="application/json" hidden></label>
+      <button id="acceptOk" disabled title="Accept every confident (auto_ok) proposal">Accept confident</button>
     </div>
     <div class="grp"><label for="step">Sample every</label><input id="step" type="number" min="0.05" max="2" step="0.05" value="0.2"><span class="dim">s</span></div>
     <div class="grp"><label for="warn">Flag disagreement over</label><input id="warn" type="number" min="0.1" max="20" step="0.1" value="1.5"><span class="dim">% of height</span></div>
@@ -62,8 +64,9 @@
       <span class="sw" style="background:var(--ok)"></span>propagated, agrees
       <span class="sw" style="background:var(--warn)"></span>propagated, disagrees
       <span class="sw" style="background:var(--unv)"></span>unverified
+      <span class="sw" style="background:#c86bff"></span>proposal to review
       <span class="sw" style="background:#777"></span>no pod front</span>
-    <small>&larr;/&rarr; frame (shift = 10) &middot; [ ] previous/next key &middot; N no pod front &middot; Del clear &middot; P propagate &middot; Backspace/Esc undo/cancel placing &middot; drag a corner to fix it (makes it a key)</small>
+    <small>&larr;/&rarr; frame (shift = 10) &middot; [ ] previous/next key &middot; A accept / X reject proposal &middot; N no pod front &middot; Del clear &middot; P propagate &middot; Backspace/Esc undo/cancel placing &middot; drag a corner to fix it (makes it a key)</small>
   </footer>
 
   <script type="module" src="label.js"></script>
