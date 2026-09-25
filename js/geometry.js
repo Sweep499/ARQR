@@ -43,3 +43,39 @@ export function isSaneQuad(q) {
   }
   return true;
 }
+
+// Stricter than isSaneQuad: also rejects the twisted, stretched shapes a bad motion estimate produces
+// (near-flat corners, opposite sides of wildly different length, corners far outside the picture).
+export function isPlausibleQuad(q, vw, vh) {
+  if (!isSaneQuad(q)) return false;
+  if (q.some(([x, y]) => !(x > -3 * vw && x < 4 * vw && y > -3 * vh && y < 4 * vh))) return false;
+  const len = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  for (let i = 0; i < 4; i++) {
+    const p = q[i], a = q[(i + 3) % 4], b = q[(i + 1) % 4];
+    const u = [a[0] - p[0], a[1] - p[1]], v = [b[0] - p[0], b[1] - p[1]];
+    const deg = Math.acos((u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v))) * 180 / Math.PI;
+    if (!(deg > 40 && deg < 140)) return false;
+  }
+  const ratio = (a, b) => Math.max(a, b) / Math.max(1e-6, Math.min(a, b));
+  return ratio(len(q[0], q[1]), len(q[3], q[2])) < 3 && ratio(len(q[0], q[3]), len(q[1], q[2])) < 3;
+}
+
+// Signed-area-free polygon area (shoelace).
+export function quadArea(q) {
+  let a = 0;
+  q.forEach((p, i) => { const n = q[(i + 1) % 4]; a += p[0] * n[1] - n[0] * p[1]; });
+  return Math.abs(a) / 2;
+}
+
+// Does the quad cover any part of the w x h picture? (samples a grid; the quad is convex)
+export function quadInView(q, w, h) {
+  const sign = (a, b, p) => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+  for (let i = 0; i <= 8; i++) {
+    for (let j = 0; j <= 8; j++) {
+      const p = [w * i / 8, h * j / 8];
+      const s = [0, 1, 2, 3].map((k) => sign(q[k], q[(k + 1) % 4], p));
+      if (s.every((v) => v >= 0) || s.every((v) => v <= 0)) return true;
+    }
+  }
+  return false;
+}

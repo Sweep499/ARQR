@@ -15,12 +15,17 @@ Version 0. What works:
   corners by hand still works at any time.
 - The outline is then followed as the phone moves (optical flow via OpenCV.js), so you can walk closer.
   Corners can be dragged to fine-tune.
+- Tracking is checked, so turning the camera away and back no longer twists the outline: motion estimates
+  that are unreliable or implausible are ignored, the outline greys out after half a second without a good
+  estimate, and it is dropped (back to "Looking for the pod") after 2.5 s of lost tracking, 3 s completely
+  out of view, or when the detector's mask stops matching it for two checks in a row. While an outline is
+  showing, a confirmed whole-front detection also nudges it back onto the pod to cancel drift (an outline
+  you placed or dragged yourself is left alone unless tracking is lost).
 - Numbered feature dots pinned to the outline; tapping one opens a popup with a description and an
   "Open feature page" link
 - All features are listed in `data/pod.json`
 
-Not done yet: using the detector to re-anchor the outline and cancel tracking drift, and estimating corners
-that are off-screen. The detector was trained on 65 labelled frames from two Silen pods (held-out IoU
+Not done yet: estimating corners that are off-screen, so the outline can be placed from a close-up view. The detector was trained on 65 labelled frames from two Silen pods (held-out IoU
 about 0.82 to 0.84 when trained on one pod and tested on the other) and has not been tried on a clip that
 shows a whole pod front from a distance, so record one and open the site with `?debug` to see what it reports.
 

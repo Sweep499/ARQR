@@ -1,4 +1,4 @@
-import { squareToQuad, applyH, applyScaledH, isSaneQuad } from './geometry.js';
+import { squareToQuad, applyH, applyScaledH, isPlausibleQuad, quadInView } from './geometry.js';
 import { loadOpenCV, FlowTracker } from './tracker.js';
 import { loadDetector } from './detector.js';
 
@@ -12,6 +12,12 @@ const sheet = $('sheet');
 
 const CORNER_NAMES = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
 const HANDLE_RADIUS = 32; // screen px within which a touch grabs a corner
+const HIDE_AFTER = 500;   // ms without a trustworthy motion estimate before the outline is greyed out and the dots hidden
+const DROP_AFTER = 2500;  // ms before the outline is dropped and the app goes back to looking for the pod
+const OFF_DROP = 3000;    // ms the outline may stay completely out of view before it is dropped (a guess drifts while unseen)
+const AGREE_MIN = 0.2;    // an outline whose overlap with the detector's mask stays below this is not on the pod
+const AGREE_STRIKES = 2;  // consecutive re-checks (about REDETECT_MS apart) before dropping it
+const REDETECT_MS = 1200; // how often the detector re-checks while an outline is showing
 
 const params = new URLSearchParams(location.search);
 const debug = params.has('debug'); // ?debug logs each detector result to the console
@@ -26,9 +32,15 @@ let detector = null;      // finds the pod front automatically once its model ha
 let detecting = false;
 let lastDetect = 0;
 let candidate = null;     // last detected quad, kept until a second detection agrees
+let lostSince = 0;        // when tracking last failed (0 = tracking is fine)
+let offSince = 0;         // when the outline last left the picture entirely
+let strikes = 0;          // consecutive re-checks where the detector's mask disagreed with the outline
+let manual = false;       // the outline came from the user's taps or drags, so the detector must not nudge it
+let holdHintUntil = 0;    // keep a status message on screen until then
 let hotspotEls = [];
 let activeEl = null;
 let hintTimer = 0;
+if (debug) window.podDebug = { get quad() { return quad; }, get tracker() { return tracker; }, set detector(d) { detector = d; }, get lost() { return lostSince; } };
 
 // ---------- start-up ----------
 
@@ -102,6 +114,10 @@ function beginPlacing() {
   quad = null;
   placing = [];
   candidate = null;
+  lostSince = 0;
+  offSince = 0;
+  strikes = 0;
+  manual = false;
   closeSheet();
   if (tracker) tracker.reset();
   updatePlacingHint();
@@ -130,6 +146,8 @@ $('stage').addEventListener('pointerdown', (e) => {
     if (placing.length === 4) {
       quad = placing;
       placing = [];
+      manual = true;
+      lostSince = 0;
       setHint('Tap a numbered dot for details. Drag a corner to fine-tune.', 7000);
     } else {
       updatePlacingHint();
@@ -144,6 +162,7 @@ $('stage').addEventListener('pointerdown', (e) => {
   });
   if (best >= 0) {
     dragging = best;
+    manual = true;
     $('stage').setPointerCapture(e.pointerId);
   } else {
     closeSheet();
@@ -175,36 +194,69 @@ function toVideo(x, y) {
 
 // ---------- automatic pod detection ----------
 
+const meanDist = (a, b) => a.reduce((s, p, i) => s + Math.hypot(p[0] - b[i][0], p[1] - b[i][1]), 0) / 4;
+
+// Tracking failed for too long: forget the outline and go back to looking for the pod.
+function dropQuad(why = 'Lost the pod.') {
+  beginPlacing();
+  setHint(why + ' Point the camera at it and step back until the whole front is in view, or tap its corners.');
+  holdHintUntil = performance.now() + 5000;
+}
+
 // Accepts a detection once two in a row agree (corners within 5% of the picture width), so a single
-// wrong frame cannot place the outline.
+// wrong frame cannot place or move the outline. With an outline showing, a confirmed detection
+// re-anchors it: it snaps at once if tracking was lost or the outline is well off, and otherwise nudges
+// it 35% of the way, which cancels slow drift. An outline the user placed or dragged is left alone
+// unless tracking has been lost.
 async function runDetector() {
   detecting = true;
   try {
     const r = await detector.detect(video);
     lastDetect = performance.now();
-    if (debug) console.log('detect', video.currentTime.toFixed(1), r ? (r.quad ? 'quad ' + r.score.toFixed(2) : 'clipped') : 'none');
-    if (quad || placing.length) return;       // the user got there first
-    if (r && r.quad) {
-      const tol = 0.05 * video.videoWidth;
-      if (candidate && candidate.every((p, i) => Math.hypot(p[0] - r.quad[i][0], p[1] - r.quad[i][1]) < tol)) {
+    if (debug) console.log('detect', video.currentTime.toFixed(1), r.quad ? 'quad ' + r.score.toFixed(2) : r.clipped ? 'clipped' : 'none');
+    if (placing.length || dragging >= 0) return;   // the user got there first
+    const vw = video.videoWidth, vh = video.videoHeight;
+
+    // an outline the detector's mask does not support is wrong (drifted, or the pod is gone): drop it
+    if (quad && r.mask && !lostSince) {
+      const a = detector.agreement(r.mask, quad, vw, vh);
+      if (debug) console.log('agreement', a.toFixed(2));
+      strikes = a < AGREE_MIN ? strikes + 1 : 0;
+      if (strikes >= AGREE_STRIKES) { dropQuad('The outline drifted off the pod.'); return; }
+    }
+
+    if (r.quad) {
+      const agrees = candidate && meanDist(candidate, r.quad) < 0.05 * vw;
+      if (!agrees) { candidate = r.quad; return; }
+      candidate = null;
+      strikes = 0;
+      if (!quad) {
         quad = r.quad;
-        candidate = null;
+        manual = false;
         setHint('Found the pod. Tap a numbered dot for details. Drag a corner to fine-tune.', 7000);
-      } else {
-        candidate = r.quad;
+      } else if (lostSince) {
+        quad = r.quad; lostSince = 0; manual = false;
+        setHint('Found the pod again.', 3000);
+      } else if (!manual) {
+        const d = meanDist(quad, r.quad);
+        if (d > 0.06 * vw) quad = r.quad;
+        else if (d > 0.005 * vw) quad = quad.map((p, i) => [p[0] + 0.35 * (r.quad[i][0] - p[0]), p[1] + 0.35 * (r.quad[i][1] - p[1])]);
+        if (debug) console.log('re-anchored, corner error', (d / vw * 100).toFixed(1) + '% of width');
       }
     } else {
       candidate = null;
-      // tell the user why nothing happened, without rewriting the same hint every 400 ms
-      const want = r && r.clipped
-        ? 'I can see the pod but not all of its front. Step back a little, or tap its corners.'
-        : 'Looking for the pod. Step back until you can see its whole front, or tap its corners.';
-      if (hint.textContent !== want) setHint(want);
+      if (!quad) {
+        // tell the user why nothing happened, without rewriting the same hint every 400 ms
+        const want = r.clipped
+          ? 'I can see the pod but not all of its front. Step back a little, or tap its corners.'
+          : 'Looking for the pod. Step back until you can see its whole front, or tap its corners.';
+        if (hint.textContent !== want && performance.now() > holdHintUntil) setHint(want);
+      }
     }
   } catch (e) {
     console.error(e);
     detector = null;                          // give up on detection, manual placing still works
-    updatePlacingHint();
+    if (!quad) updatePlacingHint();
   } finally {
     detecting = false;
   }
@@ -261,13 +313,32 @@ function frame() {
   if (video.readyState >= 2 && tracker) {
     let H = null;
     try { H = tracker.step(video); } catch (e) { console.error(e); tracker = null; }
-    if (H && quad && dragging < 0) {
-      const next = quad.map((p) => applyScaledH(H, p, tracker.scale));
-      if (isSaneQuad(next)) quad = next;
+    if (quad && dragging < 0) {
+      let moved = false;
+      if (H) {
+        const next = quad.map((p) => applyScaledH(H, p, tracker.scale));
+        if (isPlausibleQuad(next, video.videoWidth, video.videoHeight)) { quad = next; moved = true; }
+      }
+      if (moved) {
+        if (lostSince) { lostSince = 0; setHint(''); }
+      } else if (!lostSince) {
+        lostSince = performance.now();
+      } else if (performance.now() - lostSince > DROP_AFTER) {
+        dropQuad();
+      }
     }
   }
 
-  if (!quad && !placing.length && detector && !detecting && video.readyState >= 2 && performance.now() - lastDetect > 400) {
+  if (quad && dragging < 0) {
+    if (quadInView(quad, video.videoWidth, video.videoHeight)) offSince = 0;
+    else if (!offSince) offSince = performance.now();
+    else if (performance.now() - offSince > OFF_DROP) dropQuad('The pod went out of view.');
+  }
+
+  // look for the pod while there is no outline, and re-check now and then while there is one, so a
+  // lost or drifted outline snaps back as soon as the whole front is in view
+  const idle = !quad ? !placing.length : dragging < 0;
+  if (idle && detector && !detecting && video.readyState >= 2 && performance.now() - lastDetect > (quad ? REDETECT_MS : 400)) {
     runDetector();
   }
 
@@ -277,8 +348,11 @@ function frame() {
     return;
   }
 
+  const lost = lostSince && performance.now() - lostSince > HIDE_AFTER;
+  if (lost && performance.now() > holdHintUntil) setHint('Lost track of the pod. Point the camera back at it.');
   const sq = quad.map(toScreen);
-  drawQuad(sq);
+  drawQuad(sq, lost ? 0.3 : 1);
+  if (lost) { hotspotEls.forEach((el) => { el.style.display = 'none'; }); return; }
   const Hq = squareToQuad(quad);
   config.hotspots.forEach((hs, i) => {
     const [sx, sy] = toScreen(applyH(Hq, [hs.x, hs.y]));
@@ -299,7 +373,8 @@ function drawPlacing() {
   pts.forEach(([x, y]) => dot(x, y, 7, '#ffb400'));
 }
 
-function drawQuad(sq) {
+function drawQuad(sq, alpha = 1) {
+  ctx.globalAlpha = alpha;
   ctx.lineWidth = 3;
   ctx.lineJoin = 'round';
   ctx.strokeStyle = 'rgba(255, 180, 0, 0.95)';
@@ -311,6 +386,7 @@ function drawQuad(sq) {
   ctx.stroke();
   ctx.shadowBlur = 0;
   sq.forEach(([x, y]) => dot(x, y, 6, '#fff'));
+  ctx.globalAlpha = 1;
 }
 
 function dot(x, y, r, color) {

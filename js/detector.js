@@ -39,13 +39,18 @@ export class PodDetector {
     this.canvas.width = IN_W;
     this.canvas.height = IN_H;
     this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+    this.qcanvas = document.createElement('canvas');   // scratch canvas for agreement()
+    this.qcanvas.width = IN_W;
+    this.qcanvas.height = IN_H;
+    this.qctx = this.qcanvas.getContext('2d', { willReadFrequently: true });
   }
 
-  // -> null (no pod), { clipped: true } (pod found but not fully in view), or { quad, score } with the
-  // corners [TL, TR, BR, BL] in the video's own pixel coordinates.
+  // -> { mask } plus, when a pod is found, either { clipped: true } (not fully in view) or { quad, score }
+  // with the corners [TL, TR, BR, BL] in the video's own pixel coordinates. `mask` is the model's
+  // pod-front mask (256x448, 255 = pod), which agreement() compares an outline against.
   async detect(video) {
     const vw = video.videoWidth, vh = video.videoHeight;
-    if (!vw || !vh) return null;
+    if (!vw || !vh) return { mask: null };
     this.ctx.drawImage(video, 0, 0, IN_W, IN_H);
     const px = this.ctx.getImageData(0, 0, IN_W, IN_H).data;
     const plane = IN_W * IN_H;
@@ -58,11 +63,31 @@ export class PodDetector {
     const mask = new Uint8Array(plane);
     for (let i = 0; i < plane; i++) mask[i] = logits[i] > 0 ? 255 : 0;
     const r = this.outline(mask);
-    if (!r) return null;
-    if (r.clipped) return { clipped: true };
+    if (!r) return { mask };
+    if (r.clipped) return { mask, clipped: true };
     const q = reduceToQuad(r.poly);
-    if (!q) return null;
-    return { quad: q.map(([x, y]) => [x * vw / IN_W, y * vh / IN_H]), score: r.solidity };
+    if (!q) return { mask };
+    return { mask, quad: q.map(([x, y]) => [x * vw / IN_W, y * vh / IN_H]), score: r.solidity };
+  }
+
+  // How well an outline (video-pixel quad) matches a mask from detect(): intersection over union of the two
+  // regions, counted inside the picture only. Near 0 means the outline is not on the pod.
+  agreement(mask, quad, vw, vh) {
+    const c = this.qctx;
+    c.clearRect(0, 0, IN_W, IN_H);
+    c.fillStyle = '#fff';
+    c.beginPath();
+    quad.forEach(([x, y], i) => (i ? c.lineTo(x * IN_W / vw, y * IN_H / vh) : c.moveTo(x * IN_W / vw, y * IN_H / vh)));
+    c.closePath();
+    c.fill();
+    const a = c.getImageData(0, 0, IN_W, IN_H).data;
+    let inter = 0, union = 0;
+    for (let i = 0; i < IN_W * IN_H; i++) {
+      const q = a[4 * i + 3] > 127, m = mask[i] > 0;
+      if (q && m) inter++;
+      if (q || m) union++;
+    }
+    return union ? inter / union : 0;
   }
 
   // Largest blob in the mask -> hull polygon, or null when it is too small or too ragged.

@@ -2,8 +2,24 @@
 // homography, so a quad placed once keeps following the pod while the phone moves.
 // Later a trained pod detector can call `app.setCorners()` to re-anchor and cancel drift.
 
+import { applyH, isSaneQuad, quadArea } from './geometry.js';
+
 const PROC_W = 320;
 const MIN_POINTS = 70;
+const MIN_INLIERS = 12;      // fewer tracked points than this and the motion estimate is not trusted
+const MIN_INLIER_RATIO = 0.35;
+
+// A frame-to-frame motion is believable if it maps the picture onto a convex shape of about the same
+// size that has not jumped far. A blank wall or a blur gives junk that fails this.
+function plausibleMotion(H, w, h) {
+  const c = [[0, 0], [w, 0], [w, h], [0, h]];
+  const m = c.map((p) => applyH(H, p));
+  if (m.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y))) return false;
+  if (!isSaneQuad(m)) return false;
+  const ratio = quadArea(m) / (w * h);
+  if (ratio < 0.6 || ratio > 1.6) return false;
+  return m.every((p, i) => Math.hypot(p[0] - c[i][0], p[1] - c[i][1]) < 0.3 * w);
+}
 
 // Resolves with { cv }. The cv object is wrapped because opencv.js can expose a `then` method, and
 // resolving a promise with such a thenable re-invokes it forever and freezes the page.
@@ -45,7 +61,8 @@ export class FlowTracker {
     this.prevPts = null;
   }
 
-  // Returns a homography (in downscaled coords) from the previous frame to this one, or null.
+  // Returns a homography (in downscaled coords) from the previous frame to this one, or null when the
+  // motion could not be measured reliably (too few points, or an implausible result).
   step(video) {
     const cv = this.cv;
     const vw = video.videoWidth, vh = video.videoHeight;
@@ -82,10 +99,14 @@ export class FlowTracker {
         const mask = new cv.Mat();
         const Hm = cv.findHomography(srcM, dstM, cv.RANSAC, 3, mask);
         if (Hm && !Hm.empty()) {
-          H = Array.from(Hm.data64F);
+          const Ha = Array.from(Hm.data64F);
           const inliers = [];
           for (let i = 0; i < n; i++) if (mask.data[i]) inliers.push(dst[2 * i], dst[2 * i + 1]);
-          if (inliers.length >= 8) keep = cv.matFromArray(inliers.length / 2, 1, cv.CV_32FC2, inliers);
+          const count = inliers.length / 2;
+          if (count >= MIN_INLIERS && count / n >= MIN_INLIER_RATIO && plausibleMotion(Ha, w, h)) {
+            H = Ha;
+            if (count >= 8) keep = cv.matFromArray(count, 1, cv.CV_32FC2, inliers);
+          }
         }
         if (Hm) Hm.delete();
         srcM.delete(); dstM.delete(); mask.delete();
