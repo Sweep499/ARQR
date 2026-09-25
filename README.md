@@ -17,6 +17,21 @@ Version 0. What works:
 What is planned: a trained detector that finds the pod's four corners automatically, replacing the
 tap-to-place step and cancelling tracking drift.
 
+## Label pod fronts (training data for the detector)
+
+`tools/label.html` is a standalone labelling page. Serve the folder as above, open
+`http://localhost:8765/tools/label.html`, and pick a video with "Open video" (Chrome, Edge or Brave).
+
+1. Click the four corners of the pod's front frame on a frame: top-left, top-right, bottom-right,
+   bottom-left, as seen from the front. Corners may lie outside the picture; click in the dark margin.
+2. Label a key every second or so (`N` marks a frame with no pod front). Use `[` `]` to jump between keys.
+3. `P` propagates between keys with the same optical-flow tracker the app uses, forward from one key and
+   backward from the next. Frames where the two directions disagree turn red; fix them by adding a key.
+   Frames tracked from only one key (blue) are capped at 10 frames and left out of exports by default.
+4. "Export frames + masks" writes `images/`, `masks/` (white = pod front) and `<video>.labels.json`
+   (quads in pixels and normalised, plus `corners_inside` and `visible_frac` for filtering) to a folder.
+   "Export JSON" writes only the labels. Labels autosave in the browser and can be re-imported.
+
 ## Edit the features
 
 Open `data/pod.json`. Each hotspot has:
