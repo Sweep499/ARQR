@@ -8,14 +8,31 @@ is and open its feature page. Runs entirely in the browser as a static site, so 
 Version 0. What works:
 
 - Camera view (rear camera on phones) with permission prompt
-- Pod outline placed by tapping the four corners of the pod's front frame once, then followed as the
-  phone moves (optical flow via OpenCV.js). Corners can be dragged to fine-tune.
+- Pod outline found automatically: a small segmentation model (`models/pod_front.onnx`, run in the browser
+  with onnxruntime-web) finds the pod's front frame and fits its four corners. It only places the outline
+  when the **whole front is in view** (its corners are off-screen otherwise and cannot be recovered), and
+  only after two detections in a row agree. Until then the hint says to step back, and tapping the four
+  corners by hand still works at any time.
+- The outline is then followed as the phone moves (optical flow via OpenCV.js), so you can walk closer.
+  Corners can be dragged to fine-tune.
 - Numbered feature dots pinned to the outline; tapping one opens a popup with a description and an
   "Open feature page" link
 - All features are listed in `data/pod.json`
 
-What is planned: a trained detector that finds the pod's four corners automatically, replacing the
-tap-to-place step and cancelling tracking drift.
+Not done yet: using the detector to re-anchor the outline and cancel tracking drift, and estimating corners
+that are off-screen. The detector was trained on 65 labelled frames from two Silen pods (held-out IoU
+about 0.82 to 0.84 when trained on one pod and tested on the other) and has not been tried on a clip that
+shows a whole pod front from a distance, so record one and open the site with `?debug` to see what it reports.
+
+## Train the detector
+
+`tools/train/train.py` fine-tunes a small MobileNetV3 segmentation model on the labels exported by the
+labeller and writes the ONNX file the app loads:
+
+```
+python tools/train/train.py --train IMG_2822 --test IMG_2823                       # cross-pod check
+python tools/train/train.py --train IMG_2822 IMG_2823 --out models/pod_front.onnx  # final model
+```
 
 ## Label pod fronts (training data for the detector)
 

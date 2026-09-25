@@ -1,5 +1,6 @@
 import { squareToQuad, applyH, applyScaledH, isSaneQuad } from './geometry.js';
 import { loadOpenCV, FlowTracker } from './tracker.js';
+import { loadDetector } from './detector.js';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -13,6 +14,7 @@ const CORNER_NAMES = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
 const HANDLE_RADIUS = 32; // screen px within which a touch grabs a corner
 
 const params = new URLSearchParams(location.search);
+const debug = params.has('debug'); // ?debug logs each detector result to the console
 const devSrc = params.get('src'); // ?src=dev/demo.mp4 plays a file instead of the camera (testing on a PC)
 
 let config = null;
@@ -20,6 +22,10 @@ let quad = null;          // 4 corners in video pixels: TL, TR, BR, BL
 let placing = [];         // corners tapped so far while placing
 let dragging = -1;
 let tracker = null;
+let detector = null;      // finds the pod front automatically once its model has loaded
+let detecting = false;
+let lastDetect = 0;
+let candidate = null;     // last detected quad, kept until a second detection agrees
 let hotspotEls = [];
 let activeEl = null;
 let hintTimer = 0;
@@ -47,7 +53,11 @@ async function start() {
   buildHotspots();
   beginPlacing();
   loadOpenCV()
-    .then(({ cv }) => { tracker = new FlowTracker(cv); })
+    .then(({ cv }) => {
+      tracker = new FlowTracker(cv);
+      // the detector is optional: if it cannot load, tapping the corners still works
+      loadDetector(cv).then((d) => { detector = d; if (!quad && !placing.length) updatePlacingHint(); }).catch((e) => console.warn('pod detector unavailable:', e));
+    })
     .catch(() => setHint('Live tracking could not load. The pod outline will stay where you placed it.', 6000));
   requestAnimationFrame(frame);
 }
@@ -91,6 +101,7 @@ function friendlyError(e) {
 function beginPlacing() {
   quad = null;
   placing = [];
+  candidate = null;
   closeSheet();
   if (tracker) tracker.reset();
   updatePlacingHint();
@@ -98,7 +109,11 @@ function beginPlacing() {
 
 function updatePlacingHint() {
   const n = placing.length;
-  setHint(`Tap the pod's ${CORNER_NAMES[n]} corner (${n + 1} of 4)`);
+  if (n === 0 && detector) {
+    setHint('Looking for the pod. Step back until you can see its whole front, or tap its corners.');
+  } else {
+    setHint(`Tap the pod's ${CORNER_NAMES[n]} corner (${n + 1} of 4)`);
+  }
 }
 
 function setHint(text, ms = 0) {
@@ -158,6 +173,43 @@ function toVideo(x, y) {
   return [(x - ox) / s, (y - oy) / s];
 }
 
+// ---------- automatic pod detection ----------
+
+// Accepts a detection once two in a row agree (corners within 5% of the picture width), so a single
+// wrong frame cannot place the outline.
+async function runDetector() {
+  detecting = true;
+  try {
+    const r = await detector.detect(video);
+    lastDetect = performance.now();
+    if (debug) console.log('detect', video.currentTime.toFixed(1), r ? (r.quad ? 'quad ' + r.score.toFixed(2) : 'clipped') : 'none');
+    if (quad || placing.length) return;       // the user got there first
+    if (r && r.quad) {
+      const tol = 0.05 * video.videoWidth;
+      if (candidate && candidate.every((p, i) => Math.hypot(p[0] - r.quad[i][0], p[1] - r.quad[i][1]) < tol)) {
+        quad = r.quad;
+        candidate = null;
+        setHint('Found the pod. Tap a numbered dot for details. Drag a corner to fine-tune.', 7000);
+      } else {
+        candidate = r.quad;
+      }
+    } else {
+      candidate = null;
+      // tell the user why nothing happened, without rewriting the same hint every 400 ms
+      const want = r && r.clipped
+        ? 'I can see the pod but not all of its front. Step back a little, or tap its corners.'
+        : 'Looking for the pod. Step back until you can see its whole front, or tap its corners.';
+      if (hint.textContent !== want) setHint(want);
+    }
+  } catch (e) {
+    console.error(e);
+    detector = null;                          // give up on detection, manual placing still works
+    updatePlacingHint();
+  } finally {
+    detecting = false;
+  }
+}
+
 // ---------- hotspots and popup ----------
 
 function buildHotspots() {
@@ -213,6 +265,10 @@ function frame() {
       const next = quad.map((p) => applyScaledH(H, p, tracker.scale));
       if (isSaneQuad(next)) quad = next;
     }
+  }
+
+  if (!quad && !placing.length && detector && !detecting && video.readyState >= 2 && performance.now() - lastDetect > 400) {
+    runDetector();
   }
 
   if (!quad) {
