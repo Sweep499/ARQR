@@ -130,7 +130,16 @@ numbered dots without measuring anything by hand:
 3. The list starts with what is in `data/pod.json`. Select a feature (or "+ Add feature"), then click its spot
    on the picture. Fill in its title, popup text and link on the right. Drag a dot to move it; "grid" shows
    the front frame divided into tenths.
-4. "Download pod.json" (or "Copy JSON"), replace `data/pod.json` with it, and push.
+4. Save it: **"Publish to GitHub"** commits the points straight to `data/pod.json` on `main`, and the live sites
+   use them about a minute later. (Or "Download pod.json" / "Copy JSON" and replace the file yourself.)
+
+**Publishing needs a GitHub token**, because a web page cannot write to a repository on its own. In the dialog,
+click "How do I get a token?": create a *fine-grained* token limited to this one repository with
+*Contents: Read and write* and nothing else, and paste it in. It is sent only to `api.github.com`. It is never
+written into the code; it stays in the browser tab, or on this device if you tick "Remember the token". Anyone
+who has the token can change the repository, so keep it private and give it an expiry date. The tool reads
+GitHub's copy of the file first: if it is already identical it says so and does nothing, and if someone else
+changed it since this page started it stops and asks before replacing it. "Forget token" clears it.
 
 The list autosaves in the browser. Dots follow the outline if you move a corner, so set the outline first.
 

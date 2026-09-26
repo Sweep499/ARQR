@@ -5,6 +5,7 @@
 import { squareToQuad, applyH, invertH } from '../js/geometry.js';
 import { loadOpenCV } from '../js/tracker.js';
 import { loadDetector } from '../js/detector.js';
+import { publishFile, PublishError } from './github-publish.js';
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -16,6 +17,8 @@ const DOT_R = 12;
 const MAX_SIDE = 1600;   // the picture is scaled down to this before use (all coordinates are in that space)
 const CORNERS = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
 const SAVE_KEY = 'podhotspots:v1';
+const PUB_KEY = 'podhotspots:publish:v1';    // repository, branch and file (never the token)
+const TOKEN_KEY = 'podhotspots:token';
 
 const S = {
   src: null,             // canvas holding the current picture
@@ -28,12 +31,14 @@ const S = {
   drag: null,            // { type: 'corner' | 'dot', i }
   detector: null,
   loadingDetector: false,
+  baseText: null,        // data/pod.json as this page found it, to notice if GitHub's copy has changed since
 };
 window.podHotspots = S; // handy for debugging in the console
 
 // ---------- start-up ----------
 
 async function init() {
+  try { S.baseText = await (await fetch('../data/pod.json')).text(); } catch { S.baseText = null; }
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { /* private mode */ }
   if (saved && Array.isArray(saved.hot)) { S.hot = saved.hot; S.meta = saved.meta || S.meta; }
@@ -325,7 +330,7 @@ function renderList() {
     row.addEventListener('click', () => select(i));
     list.appendChild(row);
   });
-  $('export').disabled = $('copy').disabled = !S.hot.length;
+  $('export').disabled = $('copy').disabled = $('publish').disabled = !S.hot.length;
   $('del').disabled = S.sel < 0;
   const f = S.hot[S.sel];
   for (const [id, key] of [['fTitle', 'title'], ['fText', 'text'], ['fUrl', 'url']]) {
@@ -423,3 +428,85 @@ $('copy').addEventListener('click', async () => {
 function setStatus(t) { $('status').textContent = t; }
 
 init();
+
+
+// ---------- publish to GitHub ----------
+
+const pub = $('pub');
+
+// on <owner>.github.io/<repo>/ the repository is the page's own; elsewhere fall back to the project's
+function defaultRepo() {
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/);
+  const repo = location.pathname.split('/')[1];
+  return m && repo ? `${m[1]}/${repo}` : 'Sweep499/ARQR';
+}
+function readPubPrefs() {
+  try { return JSON.parse(localStorage.getItem(PUB_KEY)) || {}; } catch { return {}; }
+}
+function readToken() {
+  try { return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
+}
+function pubStatus(text, kind = '') {
+  const el = $('pubStatus');
+  el.className = kind;
+  el.textContent = text;
+  return el;
+}
+
+$('publish').addEventListener('click', () => {
+  const prefs = readPubPrefs();
+  $('pubRepo').value = prefs.repo || defaultRepo();
+  $('pubBranch').value = prefs.branch || 'main';
+  $('pubPath').value = prefs.path || 'data/pod.json';
+  $('pubMsg').value = prefs.msg || 'Update feature points (placement tool)';
+  const t = readToken();
+  $('pubToken').value = t;
+  try { $('pubRemember').checked = !!localStorage.getItem(TOKEN_KEY); } catch { $('pubRemember').checked = false; }
+  $('pubForce').hidden = true;
+  pubStatus(unplaced() ? `${unplaced()} feature${unplaced() > 1 ? 's are' : ' is'} not placed yet and will be left out.` : t ? '' : 'Paste a token to publish.');
+  pub.showModal();
+});
+$('pubClose').addEventListener('click', () => pub.close());
+$('pubForget').addEventListener('click', () => {
+  try { localStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+  $('pubToken').value = '';
+  $('pubRemember').checked = false;
+  pubStatus('The token was removed from this browser.');
+});
+
+async function runPublish(force) {
+  const placed = S.hot.filter((h) => h.x != null).length;
+  if (!placed) { pubStatus('Place at least one feature on the picture first.', 'err'); return; }
+  const token = $('pubToken').value.trim();
+  const prefs = { repo: $('pubRepo').value.trim(), branch: $('pubBranch').value.trim() || 'main', path: $('pubPath').value.trim() || 'data/pod.json', msg: $('pubMsg').value.trim() || 'Update feature points (placement tool)' };
+  try {
+    localStorage.setItem(PUB_KEY, JSON.stringify(prefs));
+    localStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_KEY);
+    (pub.querySelector('#pubRemember').checked ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
+  } catch { /* private mode: the token just is not remembered */ }
+
+  const text = buildJson();
+  $('pubGo').disabled = $('pubForce').disabled = true;
+  $('pubForce').hidden = true;
+  pubStatus('Publishing...');
+  try {
+    const r = await publishFile({ token, repo: prefs.repo, branch: prefs.branch, path: prefs.path, text, message: prefs.msg, baseText: S.baseText, force });
+    S.baseText = text;
+    if (r.status === 'unchanged') {
+      pubStatus('GitHub already has exactly these points. Nothing to publish.', 'ok');
+    } else {
+      const el = pubStatus(`Published ${placed} feature${placed > 1 ? 's' : ''}. Commit `, 'ok');
+      const a = document.createElement('a');
+      a.href = r.commitUrl || '#'; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = (r.commitSha || '').slice(0, 7) || 'view';
+      el.append(a, '. The live sites use the new points in about a minute.');
+    }
+  } catch (e) {
+    pubStatus(e instanceof PublishError ? e.message : 'Publishing failed: ' + e.message, 'err');
+    if (e instanceof PublishError && e.kind === 'changed') $('pubForce').hidden = false;
+  } finally {
+    $('pubGo').disabled = $('pubForce').disabled = false;
+  }
+}
+$('pubGo').addEventListener('click', () => runPublish(false));
+$('pubForce').addEventListener('click', () => runPublish(true));

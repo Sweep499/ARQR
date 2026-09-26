@@ -16,7 +16,7 @@
     button:hover:not(:disabled), label.btn:hover { background: #343a45; }
     button:disabled { opacity: .45; cursor: default; }
     button.primary { background: #3557d6; border-color: #3557d6; }
-    input[type=text], input[type=url], textarea, input[type=range] { background: #101216; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; font: inherit; width: 100%; }
+    input[type=text], input[type=url], input[type=password], textarea, input[type=range] { background: #101216; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; font: inherit; width: 100%; }
     textarea { resize: vertical; min-height: 4.2em; }
     main { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
     #stage { position: relative; min-height: 0; }
@@ -33,9 +33,25 @@
     .row .xy { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 12px; }
     #form { padding: 10px; border-top: 1px solid var(--line); display: grid; gap: 6px; }
     #form label { color: var(--dim); font-size: 12px; }
-    #form label.chk { display: flex; gap: 8px; align-items: flex-start; color: var(--fg); font-size: 13px; }
-    #form label.chk input { width: auto; margin-top: 3px; }
+    #form label.chk { display: block; color: var(--fg); font-size: 13px; }
+    #form label.chk input { width: auto; margin: 0 6px 0 0; vertical-align: middle; }
     .btns { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 10px; border-top: 1px solid var(--line); }
+    dialog { width: min(520px, calc(100vw - 24px)); background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+    dialog::backdrop { background: rgba(0, 0, 0, .6); }
+    dialog h2 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+    dialog form { display: grid; gap: 10px; }
+    dialog label { display: grid; gap: 4px; color: var(--dim); font-size: 12px; }
+    dialog label.chk { display: flex; gap: 8px; align-items: center; color: var(--fg); font-size: 13px; }
+    dialog label.chk input { width: auto; }
+    dialog .two { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
+    dialog code { background: #101216; padding: 1px 5px; border-radius: 4px; }
+    dialog summary { cursor: pointer; color: var(--fg); }
+    dialog ol { margin: 8px 0; padding-left: 20px; color: var(--dim); }
+    dialog a { color: #8fb3ff; }
+    #pubStatus { margin: 0; min-height: 1.4em; }
+    #pubStatus.err { color: #ff8a80; }
+    #pubStatus.ok { color: #6be3a4; }
+    dialog .btns { padding: 6px 0 0; border: 0; justify-content: flex-end; }
     footer { padding: 6px 12px; background: var(--panel); border-top: 1px solid var(--line); }
     #status { font-variant-numeric: tabular-nums; }
     .dim { color: var(--dim); }
@@ -52,7 +68,8 @@
       <label class="dim"><input id="grid" type="checkbox"> grid</label>
     </div>
     <div class="grp">
-      <button id="export" class="primary" disabled>Download pod.json</button>
+      <button id="publish" class="primary" disabled>Publish to GitHub</button>
+      <button id="export" disabled>Download pod.json</button>
       <button id="copy" disabled>Copy JSON</button>
     </div>
   </header>
@@ -83,6 +100,39 @@
     <span id="status" role="status">Open a photo or video to start.</span>
     <span class="dim"> &middot; click a feature in the list, then click its spot on the picture &middot; drag a dot or a corner to fine-tune</span>
   </footer>
+
+
+  <dialog id="pub">
+    <form id="pubForm" method="dialog">
+      <h2>Publish to GitHub</h2>
+      <p class="dim">Saves these points as <code>data/pod.json</code> in the repository. The live sites use the new points about a minute later.</p>
+      <label>Repository<input id="pubRepo" type="text" autocomplete="off" spellcheck="false"></label>
+      <div class="two">
+        <label>Branch<input id="pubBranch" type="text" autocomplete="off" spellcheck="false"></label>
+        <label>File<input id="pubPath" type="text" autocomplete="off" spellcheck="false"></label>
+      </div>
+      <label>Personal access token<input id="pubToken" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_..."></label>
+      <label class="chk"><input id="pubRemember" type="checkbox"> Remember the token on this device</label>
+      <details>
+        <summary>How do I get a token?</summary>
+        <ol>
+          <li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub &rarr; Settings &rarr; Fine-grained tokens &rarr; Generate new token</a>.</li>
+          <li>Repository access: <b>Only select repositories</b>, and pick this repository.</li>
+          <li>Permissions &rarr; Repository permissions &rarr; <b>Contents: Read and write</b>. Nothing else.</li>
+          <li>Set an expiry (30 to 90 days), generate, copy the token and paste it above.</li>
+        </ol>
+        <p class="dim">Anyone who has the token can change this repository, so keep it private. It is sent only to api.github.com and is never written into the code.</p>
+      </details>
+      <label>Commit message<input id="pubMsg" type="text" autocomplete="off"></label>
+      <p id="pubStatus" role="status"></p>
+      <div class="btns">
+        <button type="button" id="pubClose">Close</button>
+        <button type="button" id="pubForget">Forget token</button>
+        <button type="button" id="pubForce" hidden>Publish anyway</button>
+        <button type="button" id="pubGo" class="primary">Publish</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="hotspots.js"></script>
 </body>
