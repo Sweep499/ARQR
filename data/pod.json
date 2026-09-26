@@ -1,6 +1,10 @@
 {
   "name": "Silen single-person pod",
   "note": "x and y are positions on the pod's front frame: x 0 = left edge, 1 = right edge; y 0 = top edge, 1 = bottom edge. Replace the example.com links with your real feature pages.",
+  "front_mm": {
+    "width": 2380,
+    "height": 2230
+  },
   "hotspots": [
     {
       "id": "new-handle",

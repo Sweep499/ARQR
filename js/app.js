@@ -1,6 +1,8 @@
 import { squareToQuad, applyH, applyScaledH, isPlausibleQuad, quadInView } from './geometry.js';
 import { loadOpenCV, FlowTracker } from './tracker.js';
 import { loadDetector } from './detector.js';
+import { fitRectangle } from './pose.js';
+import { alignToMask } from './align.js';
 
 // Two pages share this code. The admin page (index.html) draws the outline the app has found, so an
 // administrator can check what it does. The user page (user/index.html, data-mode="user") tracks exactly
@@ -35,6 +37,7 @@ const hint = $('hint');
 const sheet = $('sheet');
 
 const CORNER_NAMES = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
+const RECT_ERR_MAX = 0.03; // a quad that misses the closest real rectangle by more than this fraction of the picture diagonal is not believable
 const HANDLE_RADIUS = 32; // screen px within which a touch grabs a corner
 const HIDE_AFTER = 400;   // ms without a trustworthy motion estimate before the outline is greyed out and the dots hidden
 const DROP_AFTER = 1500;  // ms before the outline is dropped and the app goes back to looking for the pod
@@ -42,10 +45,23 @@ const OFF_DROP = 1500;    // ms the outline may stay completely out of view befo
 const AGREE_MIN = 0.4;    // an outline whose overlap with the detector's mask stays below this is not on the pod
 const ABSENT_FRAC = 0.02; // the detector's mask covers less of the picture than this: there is no pod in view
 const AGREE_STRIKES = 2;  // consecutive re-checks (about REDETECT_MS apart) before dropping it
+const ALIGN_MIN_GAIN = 0.02; // the mask overlap must improve by at least this for the outline to be moved
+const ALIGN_MIN_START = 0;    // the outline must already overlap the mask this much
+const ALIGN_MIN_MASK = 0.02;   // and the pod must fill at least this much of the picture
+const ALIGN_WEIGHT = 0.7;    // how much of the correction is applied each time
 const REDETECT_MS = 500;  // how often the detector re-checks while an outline is showing
 
 const params = new URLSearchParams(location.search);
 const debug = params.has('debug'); // ?debug logs each detector result to the console
+// Two experiments, off by default because on the test footage they were less accurate than the plain tracker
+// (see README, "Tracking accuracy"): ?ring tracks only the outline's frame band instead of the whole picture, and
+// ?rect pulls every tracked outline onto a rectangle of the pod front's real size.
+const RING = params.has('ring');
+const RECT = params.has('rect');
+const NOALIGN = params.has('noalign'); // ?noalign turns off the mask alignment (to measure it)
+const FOCAL = parseFloat(params.get('f')) || 0.75; // the camera's focal length as a multiple of the picture's long side
+const BAND = parseFloat(params.get('band')) || 0.86; // how much of the outline's frame is tracked (0.86 = the outer 7%; 1 = its whole area)
+const NODROP = params.has('nodrop'); // ?nodrop keeps the outline whatever happens (for measuring the tracker alone)
 const devSrc = params.get('src'); // ?src=dev/demo.mp4 plays a file instead of the camera (testing on a PC)
 
 let config = null;
@@ -53,6 +69,8 @@ let quad = null;          // 4 corners in video pixels: TL, TR, BR, BL
 let placing = [];         // corners tapped so far while placing
 let dragging = -1;
 let tracker = null;
+let cvRef = null;         // OpenCV, for the rectangle fit
+let front = null;         // the pod front's real size in mm { width, height }, from data/pod.json
 let detector = null;      // finds the pod front automatically once its model has loaded
 let detecting = false;
 let lastDetect = 0;
@@ -67,7 +85,7 @@ let activeEl = null;
 let activeHotspot = null;  // the feature whose card is open
 let viewerOpen = false;   // the in-app page viewer is showing
 let hintTimer = 0;
-if (debug) window.podDebug = { get quad() { return quad; }, get tracker() { return tracker; }, set detector(d) { detector = d; }, get lost() { return lostSince; } };
+if (debug) window.podDebug = { get quad() { return quad; }, set quad(q) { quad = q; manual = false; lostSince = 0; offSince = 0; }, get tracker() { return tracker; }, get front() { return front; }, set detector(d) { detector = d; }, get lost() { return lostSince; } };
 
 // ---------- start-up ----------
 
@@ -81,6 +99,7 @@ async function start() {
   err.hidden = true;
   try {
     config = await (await fetch(new URL('../data/pod.json', import.meta.url))).json();
+    front = config.front_mm && config.front_mm.width > 0 && config.front_mm.height > 0 ? config.front_mm : null;
     await openVideoSource();
   } catch (e) {
     err.textContent = friendlyError(e);
@@ -94,8 +113,10 @@ async function start() {
   loadOpenCV()
     .then(({ cv }) => {
       tracker = new FlowTracker(cv);
+      tracker.band = BAND;
+      cvRef = cv;
       // the detector is optional: if it cannot load, tapping the corners still works
-      loadDetector(cv).then((d) => { detector = d; if (!quad && !placing.length) updatePlacingHint(); }).catch((e) => { console.warn('pod detector unavailable:', e); if (TXT.noDetector) setHint(TXT.noDetector); });
+      loadDetector(cv, params.get('model') || undefined).then((d) => { detector = d; if (!quad && !placing.length) updatePlacingHint(); }).catch((e) => { console.warn('pod detector unavailable:', e); if (TXT.noDetector) setHint(TXT.noDetector); });
     })
     .catch(() => setHint('Live tracking could not load. The pod outline will stay where you placed it.', 6000));
   requestAnimationFrame(frame);
@@ -222,12 +243,24 @@ function toVideo(x, y) {
   return [(x - ox) / s, (y - oy) / s];
 }
 
+// ---------- keeping the outline a real rectangle ----------
+
+// Fits the pod front's real size to a quad and returns the closest physically possible quad, or null when the
+// quad is not believable as a rectangle of that size (or when the size is not known / the legacy way is on).
+function rectify(q) {
+  if (!RECT || !front || !cvRef) return null;
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const r = fitRectangle(cvRef, q, vw, vh, front, FOCAL * Math.max(vw, vh));
+  return r && r.err <= RECT_ERR_MAX ? r : null;
+}
+
 // ---------- automatic pod detection ----------
 
 const meanDist = (a, b) => a.reduce((s, p, i) => s + Math.hypot(p[0] - b[i][0], p[1] - b[i][1]), 0) / 4;
 
 // Tracking failed for too long: forget the outline and go back to looking for the pod.
 function dropQuad(why = 'Lost the pod.') {
+  if (NODROP) return;
   beginPlacing();
   setHint(TXT.lost(why));
   holdHintUntil = performance.now() + 5000;
@@ -251,28 +284,40 @@ async function runDetector() {
     // pod is somewhere the outline is not (drifted). Two checks in a row (about a second) and it is deleted.
     if (quad) {
       const absent = (r.maskFrac ?? 1) < ABSENT_FRAC;
-      const a = absent || !r.mask ? 0 : detector.agreement(r.mask, quad, vw, vh);
+      let a = absent || !r.mask ? 0 : detector.agreement(r.mask, quad, vw, vh);
+      // the pod is in view but the outline is not exactly on it: slide it onto the mask, even when the pod is cut
+      // off by the picture edge. Outlines the person placed by hand are left alone.
+      // (guards for a thin sliver of pod or a weak start made the results worse on the test clip, so they are off)
+      if (!NOALIGN && !manual && !absent && r.mask && dragging < 0 && a < 0.97 && a >= ALIGN_MIN_START && r.maskFrac >= ALIGN_MIN_MASK) {
+        const al = alignToMask(quad, r.mask, vw, vh);
+        if (al.after - al.before >= ALIGN_MIN_GAIN && al.after >= 0.4) {
+          quad = quad.map((p, i) => [p[0] + ALIGN_WEIGHT * (al.quad[i][0] - p[0]), p[1] + ALIGN_WEIGHT * (al.quad[i][1] - p[1])]);
+          if (debug) console.log('aligned to mask, overlap', al.before.toFixed(2), '->', al.after.toFixed(2));
+          a = detector.agreement(r.mask, quad, vw, vh);
+        }
+      }
       if (debug) console.log(absent ? 'pod absent' : 'agreement ' + a.toFixed(2));
       strikes = absent || a < AGREE_MIN ? strikes + 1 : 0;
       if (strikes >= AGREE_STRIKES) { dropQuad(absent ? 'The pod went out of view.' : 'The outline drifted off the pod.'); return; }
     }
 
     if (r.quad) {
-      const agrees = candidate && meanDist(candidate, r.quad) < 0.05 * vw;
-      if (!agrees) { candidate = r.quad; return; }
+      const dq = (rectify(r.quad) || { quad: r.quad }).quad;   // the closest real rectangle of the pod's size, if known
+      const agrees = candidate && meanDist(candidate, dq) < 0.05 * vw;
+      if (!agrees) { candidate = dq; return; }
       candidate = null;
       strikes = 0;
       if (!quad) {
-        quad = r.quad;
+        quad = dq;
         manual = false;
         setHint(TXT.found, 7000);
       } else if (lostSince) {
-        quad = r.quad; lostSince = 0; manual = false;
+        quad = dq; lostSince = 0; manual = false;
         setHint(TXT.foundAgain, 3000);
       } else if (!manual) {
-        const d = meanDist(quad, r.quad);
-        if (d > 0.06 * vw) quad = r.quad;
-        else if (d > 0.005 * vw) quad = quad.map((p, i) => [p[0] + 0.35 * (r.quad[i][0] - p[0]), p[1] + 0.35 * (r.quad[i][1] - p[1])]);
+        const d = meanDist(quad, dq);
+        if (d > 0.06 * vw) quad = dq;
+        else if (d > 0.005 * vw) quad = quad.map((p, i) => [p[0] + 0.35 * (dq[i][0] - p[0]), p[1] + 0.35 * (dq[i][1] - p[1])]);
         if (debug) console.log('re-anchored, corner error', (d / vw * 100).toFixed(1) + '% of width');
       }
     } else {
@@ -410,12 +455,16 @@ function frame() {
 
   if (video.readyState >= 2 && tracker) {
     let H = null;
-    try { H = tracker.step(video); } catch (e) { console.error(e); tracker = null; }
+    try { H = tracker.step(video, RING && quad && dragging < 0 ? quad : null); } catch (e) { console.error(e); tracker = null; }
     if (quad && dragging < 0) {
       let moved = false;
       if (H) {
-        const next = quad.map((p) => applyScaledH(H, p, tracker.scale));
-        if (isPlausibleQuad(next, video.videoWidth, video.videoHeight)) { quad = next; moved = true; }
+        let next = quad.map((p) => applyScaledH(H, p, tracker.scale));
+        if (RECT && front && !manual) {                          // pull the shape onto a real rectangle of the pod's size
+          const r = rectify(next);
+          if (r) next = r.quad;                                  // (a quad that will not fit is left as it is, never frozen)
+        }
+        if (next && isPlausibleQuad(next, video.videoWidth, video.videoHeight)) { quad = next; moved = true; }
       }
       if (moved) {
         if (lostSince) { lostSince = 0; setHint(''); }

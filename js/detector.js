@@ -4,7 +4,7 @@
 // picture edge its corners are off-screen and cannot be recovered, so it returns { clipped: true }.
 
 const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
-const IN_W = 256, IN_H = 448;               // model input (the same 9:16 shape it was trained on)
+export const IN_W = 256, IN_H = 448;               // model input (the same 9:16 shape it was trained on)
 const MEAN = [0.485, 0.456, 0.406], STD = [0.229, 0.224, 0.225];
 const MIN_AREA = 0.08;                      // smallest accepted front, as a fraction of the picture
 const MIN_SOLID = 0.85;                     // outline area / hull area; low means fragments or a leak

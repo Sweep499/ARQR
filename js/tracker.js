@@ -6,6 +6,8 @@ import { applyH, isSaneQuad, quadArea } from './geometry.js';
 
 const PROC_W = 320;
 const MIN_POINTS = 70;
+const MIN_RING_POINTS = 30;   // when following an outline, fewer points than this are enough to keep going
+const FRAME_BAND = 0.86;      // the band of the outline that is tracked: from its edge in to this fraction of its size
 const MIN_INLIERS = 12;      // fewer tracked points than this and the motion estimate is not trusted
 const MIN_INLIER_RATIO = 0.35;
 
@@ -52,6 +54,29 @@ export class FlowTracker {
     this.prevGray = null;
     this.prevPts = null;
     this.scale = 1;
+    this.band = FRAME_BAND;       // how far in from the outline's edge the tracked band reaches (1 = its whole area)
+    this.mode = 'all';            // 'all' = features anywhere; 'frame' = features on the outline's frame only
+    this.info = { mode: 'all', points: 0 };
+  }
+
+  // A mask that keeps features to the outline's frame (its edge band), then to its whole area, then to
+  // nothing (the whole picture) if the outline is mostly off-screen. Points on the pod's frame move as one
+  // plane; points elsewhere (the room, furniture seen through the glass) move differently as you walk.
+  _mask(quad, level) {
+    const cv = this.cv, w = this.canvas.width, h = this.canvas.height;
+    const qs = quad.map(([x, y]) => [Math.max(-1e5, Math.min(1e5, x * this.scale)), Math.max(-1e5, Math.min(1e5, y * this.scale))]);
+    const cx = qs.reduce((a, p) => a + p[0], 0) / 4, cy = qs.reduce((a, p) => a + p[1], 0) / 4;
+    const poly = (k) => cv.matFromArray(4, 1, cv.CV_32SC2, qs.flatMap(([x, y]) => [Math.round(cx + (x - cx) * k), Math.round(cy + (y - cy) * k)]));
+    const m = cv.Mat.zeros(h, w, cv.CV_8UC1);
+    const outer = poly(1.03);
+    cv.fillConvexPoly(m, outer, new cv.Scalar(255));
+    outer.delete();
+    if (level === 0) {
+      const inner = poly(this.band);
+      cv.fillConvexPoly(m, inner, new cv.Scalar(0));
+      inner.delete();
+    }
+    return m;
   }
 
   reset() {
@@ -62,8 +87,9 @@ export class FlowTracker {
   }
 
   // Returns a homography (in downscaled coords) from the previous frame to this one, or null when the
-  // motion could not be measured reliably (too few points, or an implausible result).
-  step(video) {
+  // motion could not be measured reliably (too few points, or an implausible result). With `quad` (the
+  // outline in video pixels) the motion is measured on the outline's frame rather than on the whole room.
+  step(video, quad = null) {
     const cv = this.cv;
     const vw = video.videoWidth, vh = video.videoHeight;
     if (!vw || !vh) return null;
@@ -82,6 +108,13 @@ export class FlowTracker {
 
     let H = null;
     let keep = null;
+
+    const mode = quad ? 'frame' : 'all';
+    if (mode !== this.mode) {                 // the kind of point wanted has changed: start again from fresh points
+      if (this.prevPts) this.prevPts.delete();
+      this.prevPts = null;
+      this.mode = mode;
+    }
 
     if (this.prevGray && this.prevPts && this.prevPts.rows >= 8) {
       const next = new cv.Mat(), status = new cv.Mat(), err = new cv.Mat();
@@ -115,14 +148,26 @@ export class FlowTracker {
     }
 
     if (this.prevPts) this.prevPts.delete();
-    if (keep && keep.rows >= MIN_POINTS) {
+    if (keep && keep.rows >= (quad ? MIN_RING_POINTS : MIN_POINTS)) {
       this.prevPts = keep;
     } else {
       if (keep) keep.delete();
-      const pts = new cv.Mat();
-      cv.goodFeaturesToTrack(gray, pts, 250, 0.01, 8);
+      let pts = new cv.Mat();
+      if (quad) {
+        for (let level = this.band >= 1 ? 1 : 0; level < 2; level++) {     // frame band first, then the whole outline area
+          const mask = this._mask(quad, level);
+          pts.delete(); pts = new cv.Mat();
+          cv.goodFeaturesToTrack(gray, pts, 250, 0.01, 8, mask);
+          mask.delete();
+          if (pts.rows >= MIN_RING_POINTS) break;
+        }
+        if (pts.rows < 12) { pts.delete(); pts = new cv.Mat(); cv.goodFeaturesToTrack(gray, pts, 250, 0.01, 8); }
+      } else {
+        cv.goodFeaturesToTrack(gray, pts, 250, 0.01, 8);
+      }
       this.prevPts = pts;
     }
+    this.info = { mode: this.mode, points: this.prevPts.rows };
     if (this.prevGray) this.prevGray.delete();
     this.prevGray = gray;
     return H;

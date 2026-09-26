@@ -43,6 +43,10 @@ async function init() {
   try { saved = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { /* private mode */ }
   if (saved && Array.isArray(saved.hot)) { S.hot = saved.hot; S.meta = saved.meta || S.meta; }
   else await reloadFromFile();
+  if (!S.meta.front_mm) {                   // an older saved list may not have the front size: take it from the file
+    try { S.meta.front_mm = (await (await fetch('../data/pod.json')).json()).front_mm || null; } catch { /* ignore */ }
+  }
+  renderFront();
   renderList();
   loadDetectorInBackground();
 }
@@ -50,7 +54,7 @@ async function init() {
 async function reloadFromFile() {
   try {
     const j = await (await fetch('../data/pod.json')).json();
-    S.meta = { name: j.name || 'Pod', note: j.note || S.meta.note };
+    S.meta = { name: j.name || 'Pod', note: j.note || S.meta.note, front_mm: j.front_mm || null };
     S.hot = (j.hotspots || []).map((h) => ({ title: h.title || '', text: h.text || '', url: h.url || '', embed: h.embed !== false, x: h.x ?? null, y: h.y ?? null }));
   } catch (e) {
     setStatus('Could not read data/pod.json: ' + e.message);
@@ -404,7 +408,8 @@ function buildJson() {
     used.add(id);
     return { id, title: h.title, text: h.text, url: h.url, ...(h.embed === false ? { embed: false } : {}), x: +h.x.toFixed(3), y: +h.y.toFixed(3) };
   });
-  return JSON.stringify({ name: S.meta.name, note: S.meta.note, hotspots }, null, 2) + '\n';
+  const front = S.meta.front_mm && S.meta.front_mm.width > 0 && S.meta.front_mm.height > 0 ? { front_mm: { width: S.meta.front_mm.width, height: S.meta.front_mm.height } } : {};
+  return JSON.stringify({ name: S.meta.name, note: S.meta.note, ...front, hotspots }, null, 2) + '\n';
 }
 S.buildJson = buildJson;
 
@@ -510,3 +515,19 @@ async function runPublish(force) {
 }
 $('pubGo').addEventListener('click', () => runPublish(false));
 $('pubForce').addEventListener('click', () => runPublish(true));
+
+
+// ---------- the pod front's real size ----------
+
+function renderFront() {
+  const f = S.meta.front_mm;
+  $('fFrontW').value = f ? f.width : '';
+  $('fFrontH').value = f ? f.height : '';
+}
+for (const id of ['fFrontW', 'fFrontH']) {
+  $(id).addEventListener('change', () => {
+    const w = parseFloat($('fFrontW').value), h = parseFloat($('fFrontH').value);
+    S.meta.front_mm = w > 0 && h > 0 ? { width: w, height: h } : null;
+    save();
+  });
+}

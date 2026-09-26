@@ -12,6 +12,36 @@ is hosted in `css/fonts/` so the pages make no request to Google. No Silen logo 
 add them yourself if you have the right to. Colours and sizes are variables at the top of `css/style.css`.
 The admin page's outline stays amber so it shows up on any picture.
 
+## Tracking accuracy
+
+How well the outline stays on the pod while the camera moves was measured on your IMG_2823 clip (`tools/bench`):
+the outline starts at a hand-reviewed frame, the clip is stepped through, and at each of the 23 later hand-reviewed
+frames the overlap between the outline and the labelled pod front is measured (1 = exact, counted inside the
+picture). The detector used never saw this clip. Higher is better.
+
+| How the outline is tracked | mean overlap | worst fifth | frames above 0.7 |
+|---|---|---|---|
+| plain tracking of the whole picture, no correction | 0.607 | 0.34 | 11 of 23 |
+| **plus mask alignment (what runs now)** | **0.630** | **0.37** | 11 to 13 of 23 |
+| tracking only the outline's frame band (`?ring`) | 0.438 | 0.17 | 7 of 23 |
+| forcing a rectangle of the real front size (`?rect`) | 0.425 | 0.18 | 6 of 23 |
+| frame band and rectangle together | 0.401 | 0.15 | 8 of 23 |
+
+* **Mask alignment** (`js/align.js`, on by default, `?noalign` turns it off): every detector check produces a pod
+  mask even when the pod is cut off by the picture edge, and the outline is nudged by the shift, scale and turn
+  that makes it overlap that mask best. The gain is small and steady, largest when the pod was in view for a while
+  (up to +0.15 at some frames). It can also hurt: when only a sliver of pod comes back into view the outline can be
+  pulled the wrong way, and it trusts the detector's mask, so it is only as good as the detector. Guards against
+  that (a minimum overlap, a minimum mask size, smaller limits) each lowered the average, so none are used.
+* **Frame band and rectangle** (`js/pose.js`, `?ring`, `?rect`) were the two ideas that looked best on paper and
+  were worse in practice, so they are off by default and kept only for experiments. Tracking just the frame leaves
+  too few points when part of the frame is off-screen. Pulling every tracked outline onto a rectangle of the
+  front's size (`front_mm` in `data/pod.json`) adds a small error each time when the assumed camera lens or the
+  size is slightly off, and the errors build up. The rectangle would need the lens estimated per phone first.
+* **Limits of these numbers:** one 25 second clip, one starting point, and labels that are hand-reviewed outlines
+  rather than exact corners. Treat differences of about 0.02 as noise. A clip with the whole pod front in view at
+  the start would show more (the detector can then re-anchor the outline with exact corners).
+
 ## Two pages
 
 | Page | URL | Shows the outline? | For |
