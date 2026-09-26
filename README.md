@@ -117,6 +117,8 @@ Some websites refuse to be shown inside another page (silen.com does, with `X-Fr
 set `"embed": false` on the feature (the placement page has a tick box) and it opens in a new tab instead.
 Check a site with `curl -sI <url>`: an `x-frame-options` or `content-security-policy: frame-ancestors` header
 means it will not embed. Pages you link to show their own cookie banners inside the frame.
+A link that is a photo (`.jpg`, `.png`, `.webp`, `.gif`, `.avif`) is shown scaled to fit the screen instead of in a frame,
+so detail photos need no scrolling.
 
 ## Place the feature dots
 

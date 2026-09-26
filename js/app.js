@@ -355,16 +355,29 @@ function closeViewer() {
   setTimeout(() => { if (viewerOpen) hideViewer(); }, 150);
 }
 
+const IS_PHOTO = /\.(jpe?g|png|webp|gif|avif)(\?.*)?$/i;
+
 function openViewer(h) {
   $('viewerTitle').textContent = h.title || '';
   $('viewerOpen').href = h.url;
+  $('viewerLoading').textContent = 'Loading\u2026';
   $('viewerLoading').hidden = false;
-  const f = $('viewerFrame');
-  f.onload = () => { $('viewerLoading').hidden = true; };
+  const f = $('viewerFrame'), img = $('viewerImg');
+  const photo = IS_PHOTO.test(h.url);
+  f.hidden = photo;
+  img.hidden = !photo;
   $('viewer').hidden = false;
   viewerOpen = true;
   history.pushState({ viewer: true }, '');       // so the phone's Back button closes the viewer, not the app
-  f.contentWindow.location.replace(h.url);       // replace, not src: setting src would add a history entry of its own
+  if (photo) {
+    img.alt = h.title || '';
+    img.onload = () => { $('viewerLoading').hidden = true; };
+    img.onerror = () => { $('viewerLoading').textContent = 'The picture could not be loaded. Try "Open in browser".'; };
+    img.src = h.url;
+  } else {
+    f.onload = () => { $('viewerLoading').hidden = true; };
+    f.contentWindow.location.replace(h.url);     // replace, not src: setting src would add a history entry of its own
+  }
   $('viewerClose').focus();
 }
 
@@ -374,6 +387,11 @@ function hideViewer() {
   const f = $('viewerFrame');
   f.onload = null;
   f.contentWindow.location.replace('about:blank'); // stops the page loading, playing sound or running
+  const img = $('viewerImg');
+  img.onload = img.onerror = null;
+  img.removeAttribute('src');
+  img.hidden = true;
+  f.hidden = false;
   if (!$('sheet').hidden) $('sheetLink').focus();
 }
 
