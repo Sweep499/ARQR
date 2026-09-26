@@ -1,17 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-mode="user">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <title>Pod Feature Guide (admin view)</title>
-  <link rel="stylesheet" href="css/style.css">
+  <title>Pod Feature Guide</title>
+  <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
   <section id="start">
     <h1>Pod feature guide</h1>
     <p>Point your camera at the pod to see what it is made of and where the features are.</p>
-    <p><strong>Admin view:</strong> the outline the app has found is drawn on the picture, so you can check what it does.</p>
     <button id="startBtn" type="button">Start camera</button>
     <p id="error" role="alert" hidden></p>
     <small>The camera image stays on your device. Nothing is uploaded.</small>
@@ -24,7 +23,7 @@
 
     <div id="hint" role="status"></div>
     <div class="toolbar">
-      <button id="resetBtn" type="button">Find pod again</button>
+      <button id="resetBtn" type="button">Scan again</button>
     </div>
 
     <aside id="sheet" hidden aria-live="polite">
@@ -35,6 +34,6 @@
     </aside>
   </main>
 
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="../js/app.js"></script>
 </body>
 </html>

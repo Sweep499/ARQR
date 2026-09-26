@@ -3,6 +3,18 @@
 Scan a QR code, allow the camera, point it at a pod, and tap numbered dots to see what each part
 is and open its feature page. Runs entirely in the browser as a static site, so it works on GitHub Pages.
 
+## Two pages
+
+| Page | URL | Shows the outline? | For |
+|---|---|---|---|
+| Admin view | `/` (`index.html`) | yes, with corner handles | checking what the app does and where it thinks the pod is |
+| User view | `/user/` | no, only the numbered dots | the people you give the QR code to |
+
+They run the same code and the same model. The user page tracks the pod exactly as the admin page does but
+draws nothing over it, does not ask anyone to tap corners, and uses plain hints ("Step back a little so the
+whole front of the pod is in view."). If the pod finder cannot start on a device, it says so. Print the QR
+code for the `/user/` address.
+
 ## Status
 
 Version 0. What works:
@@ -131,7 +143,7 @@ then open http://localhost:8765/. To test on a PC without a camera, put a video 
 
 1. Create a GitHub repository and push this folder.
 2. Settings, Pages, deploy from branch `main`, folder `/ (root)`.
-3. The site is served at `https://<user>.github.io/<repo>/`, which is https, so the camera prompt works.
-4. Make a QR code for that URL and print it next to the pod.
+3. The admin page is served at `https://<user>.github.io/<repo>/` and the user page at `https://<user>.github.io/<repo>/user/`. Both are https, so the camera prompt works.
+4. Make a QR code for the `/user/` URL and print it next to the pod.
 
 `dev/`, `dataset/` and `video/` are git-ignored, so raw showroom footage is not published.

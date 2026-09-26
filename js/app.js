@@ -2,6 +2,30 @@ import { squareToQuad, applyH, applyScaledH, isPlausibleQuad, quadInView } from 
 import { loadOpenCV, FlowTracker } from './tracker.js';
 import { loadDetector } from './detector.js';
 
+// Two pages share this code. The admin page (index.html) draws the outline the app has found, so an
+// administrator can check what it does. The user page (user/index.html, data-mode="user") tracks exactly
+// the same way but draws no outline or corner handles, and does not ask people to tap corners.
+const USER_MODE = document.documentElement.dataset.mode === 'user';
+const TXT = USER_MODE ? {
+  wait: 'Getting ready…',
+  search: 'Point the camera at the pod and step back until you can see its whole front.',
+  partial: 'Step back a little so the whole front of the pod is in view.',
+  found: 'Tap a numbered dot for details.',
+  foundAgain: '',
+  lost: () => 'Point the camera back at the pod and step back until you can see its whole front.',
+  lostTrack: 'Point the camera back at the pod.',
+  noDetector: 'The pod finder could not start on this device.',
+} : {
+  wait: null,
+  search: 'Looking for the pod. Step back until you can see its whole front, or tap its corners.',
+  partial: 'I can see the pod but not all of its front. Step back a little, or tap its corners.',
+  found: 'Found the pod. Tap a numbered dot for details. Drag a corner to fine-tune.',
+  foundAgain: 'Found the pod again.',
+  lost: (why) => why + ' Point the camera at it and step back until the whole front is in view, or tap its corners.',
+  lostTrack: 'Lost track of the pod. Point the camera back at it.',
+  noDetector: null,
+};
+
 const $ = (id) => document.getElementById(id);
 const video = $('video');
 const overlay = $('overlay');
@@ -54,7 +78,7 @@ async function start() {
   const err = $('error');
   err.hidden = true;
   try {
-    config = await (await fetch('data/pod.json')).json();
+    config = await (await fetch(new URL('../data/pod.json', import.meta.url))).json();
     await openVideoSource();
   } catch (e) {
     err.textContent = friendlyError(e);
@@ -69,7 +93,7 @@ async function start() {
     .then(({ cv }) => {
       tracker = new FlowTracker(cv);
       // the detector is optional: if it cannot load, tapping the corners still works
-      loadDetector(cv).then((d) => { detector = d; if (!quad && !placing.length) updatePlacingHint(); }).catch((e) => console.warn('pod detector unavailable:', e));
+      loadDetector(cv).then((d) => { detector = d; if (!quad && !placing.length) updatePlacingHint(); }).catch((e) => { console.warn('pod detector unavailable:', e); if (TXT.noDetector) setHint(TXT.noDetector); });
     })
     .catch(() => setHint('Live tracking could not load. The pod outline will stay where you placed it.', 6000));
   requestAnimationFrame(frame);
@@ -127,7 +151,9 @@ function beginPlacing() {
 function updatePlacingHint() {
   const n = placing.length;
   if (n === 0 && detector) {
-    setHint('Looking for the pod. Step back until you can see its whole front, or tap its corners.');
+    setHint(TXT.search);
+  } else if (USER_MODE) {
+    setHint(TXT.wait);
   } else {
     setHint(`Tap the pod's ${CORNER_NAMES[n]} corner (${n + 1} of 4)`);
   }
@@ -141,6 +167,7 @@ function setHint(text, ms = 0) {
 
 $('stage').addEventListener('pointerdown', (e) => {
   if (e.target.closest('button, aside, a')) return;
+  if (USER_MODE) { closeSheet(); return; }   // nothing to place or drag: the outline is not shown
   const p = toVideo(e.clientX, e.clientY);
   if (!quad) {
     placing.push(p);
@@ -200,7 +227,7 @@ const meanDist = (a, b) => a.reduce((s, p, i) => s + Math.hypot(p[0] - b[i][0], 
 // Tracking failed for too long: forget the outline and go back to looking for the pod.
 function dropQuad(why = 'Lost the pod.') {
   beginPlacing();
-  setHint(why + ' Point the camera at it and step back until the whole front is in view, or tap its corners.');
+  setHint(TXT.lost(why));
   holdHintUntil = performance.now() + 5000;
 }
 
@@ -236,10 +263,10 @@ async function runDetector() {
       if (!quad) {
         quad = r.quad;
         manual = false;
-        setHint('Found the pod. Tap a numbered dot for details. Drag a corner to fine-tune.', 7000);
+        setHint(TXT.found, 7000);
       } else if (lostSince) {
         quad = r.quad; lostSince = 0; manual = false;
-        setHint('Found the pod again.', 3000);
+        setHint(TXT.foundAgain, 3000);
       } else if (!manual) {
         const d = meanDist(quad, r.quad);
         if (d > 0.06 * vw) quad = r.quad;
@@ -251,8 +278,8 @@ async function runDetector() {
       if (!quad) {
         // tell the user why nothing happened, without rewriting the same hint every 400 ms
         const want = r.clipped
-          ? 'I can see the pod but not all of its front. Step back a little, or tap its corners.'
-          : 'Looking for the pod. Step back until you can see its whole front, or tap its corners.';
+          ? TXT.partial
+          : TXT.search;
         if (hint.textContent !== want && performance.now() > holdHintUntil) setHint(want);
       }
     }
@@ -346,15 +373,15 @@ function frame() {
   }
 
   if (!quad) {
-    drawPlacing();
+    if (!USER_MODE) drawPlacing();
     hotspotEls.forEach((el) => { el.style.display = 'none'; });
     return;
   }
 
   const lost = lostSince && performance.now() - lostSince > HIDE_AFTER;
-  if (lost && performance.now() > holdHintUntil) setHint('Lost track of the pod. Point the camera back at it.');
+  if (lost && performance.now() > holdHintUntil) setHint(TXT.lostTrack);
   const sq = quad.map(toScreen);
-  drawQuad(sq, lost ? 0.3 : 1);
+  if (!USER_MODE) drawQuad(sq, lost ? 0.3 : 1);
   if (lost) { hotspotEls.forEach((el) => { el.style.display = 'none'; }); return; }
   const Hq = squareToQuad(quad);
   config.hotspots.forEach((hs, i) => {
