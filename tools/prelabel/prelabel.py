@@ -58,9 +58,13 @@ def panes(m, im):
     return [(sc, b) for sc, b in got if sum(inside(o, b) for _, o in got if o is not b) < 2]
 
 
-def add_rim(mask, gray, iters=22, dark=95):
+def add_rim(mask, gray, iters=None, dark=95):
     """SAM's mask stops at the inside of the black frame. Grow it outward over dark pixels only, so it
     reaches the frame's outer edge without spilling onto the white body or the floor."""
+    if iters is None:
+        # on a dark background the "dark frame" test would grow the mask into the background, so grow less
+        ring = np.concatenate([gray[:10].ravel(), gray[-10:].ravel(), gray[:, :10].ravel(), gray[:, -10:].ravel()])
+        iters = 22 if np.median(ring) > 60 else 6
     dark_px = (gray < dark).astype(np.uint8)
     k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     cur = mask.copy()
@@ -181,7 +185,17 @@ def rescore(path):
     print(f"rescored {path}: {sum(r['auto_ok'] for r in j['frames'])} auto_ok of {len(j['frames'])} frames")
 
 
+IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+
+
 def frames(path, step):
+    if path.lower().endswith(IMAGE_EXT):          # a still image counts as a one-frame video
+        im = Image.open(path)
+        if im.mode == "RGBA":                     # composite on white so transparent pixels are not black
+            bg = Image.new("RGB", im.size, "white"); bg.paste(im, mask=im.split()[3]); im = bg
+        im = im.convert("RGB")
+        yield 0.0, im.resize((MODEL_W, round(im.height * MODEL_W / im.width)), Image.LANCZOS), im.size
+        return
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
         raise SystemExit(f"cannot open {path}")

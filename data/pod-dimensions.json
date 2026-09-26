@@ -1,0 +1,8 @@
+{
+  "model": "Silen Space Gen 2 Meet 2",
+  "source": "Silen_Space_Gen_2_Meet_2.dwg (manufacturer CAD, millimetres), read with libredwg",
+  "footprint_mm": { "width": 2380, "depth": 1107, "note": "layer 2D_Silen_Space_Meet2_Pod; door swing arcs extend the drawing to -2072 in y" },
+  "height_mm": 2290,
+  "height_note": "top of the 3D solids ($EXTMAX z = 2290.4); the 3D solids themselves are ACIS data that libredwg does not expand, so this comes from the drawing extents, not a mesh",
+  "front_aspect_width_over_height": 1.04
+}

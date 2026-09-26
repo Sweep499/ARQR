@@ -24,19 +24,33 @@ Version 0. What works:
   While an outline is showing, a confirmed whole-front detection also nudges it back onto the pod to cancel
   drift; an outline you placed or dragged yourself is left alone unless tracking is lost.
 
-Not done yet: estimating corners that are off-screen, so the outline can be placed from a close-up view. The detector was trained on 65 labelled frames from two Silen pods (held-out IoU
-about 0.82 to 0.84 when trained on one pod and tested on the other) and has not been tried on a clip that
-shows a whole pod front from a distance, so record one and open the site with `?debug` to see what it reports.
+Not done yet: estimating corners that are off-screen, so the outline can be placed from a close-up view.
+The detector was trained on 65 labelled frames from two showroom pods (IMG_2822, IMG_2823), 28 labelled
+frames of the manufacturer's Silen Space Gen 2 Meet 2 renders (a 360 turntable video and stills, cut into
+random phone-shaped views), and 11 real frames without the pod. Checked on pods it had not seen, it scores
+IoU about 0.83 to 0.90 against hand-reviewed masks. On held-out render stills it found the four corners
+of a whole front in 8 of 14 views (mean corner-quad IoU 0.91). It has not been tried on real footage that
+shows a whole pod front from a distance, so record one and open the site with `?debug` to see what it
+reports.
 
 ## Train the detector
 
 `tools/train/train.py` fine-tunes a small MobileNetV3 segmentation model on the labels exported by the
-labeller and writes the ONNX file the app loads:
+labeller and writes the ONNX file the app loads. Label folders live in `dataset/labels/<name>/images` and
+`.../masks`. A folder whose name starts with `RENDER` holds renders of any aspect ratio: each training step
+turns one into a random phone-shaped view (usually the whole front in view, sometimes cut off, sometimes a
+crop with no pod at all). A folder of frames with all-black masks (for example `NEG_REAL`) teaches "no pod
+here".
 
 ```
 python tools/train/train.py --train IMG_2822 --test IMG_2823                       # cross-pod check
-python tools/train/train.py --train IMG_2822 IMG_2823 --out models/pod_front.onnx  # final model
+python tools/train/train.py --train IMG_2822 IMG_2823 RENDER_360 RENDER_IMG NEG_REAL --epochs 60 \
+    --render-repeat 3 --out models/pod_front.onnx                                  # final model
 ```
+
+`tools/prelabel/prelabel.py` also takes still images, so renders can be pre-labelled and reviewed the same
+way as video. The real size of the Meet 2 (2380 mm wide, about 2290 mm tall, front shape about 1.04 wide to
+tall) is in `data/pod-dimensions.json`, read from the manufacturer's DWG.
 
 ## Label pod fronts (training data for the detector)
 
