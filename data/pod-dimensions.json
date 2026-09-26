@@ -1,8 +1,36 @@
 {
   "model": "Silen Space Gen 2 Meet 2",
-  "source": "Silen_Space_Gen_2_Meet_2.dwg (manufacturer CAD, millimetres), read with libredwg",
-  "footprint_mm": { "width": 2380, "depth": 1107, "note": "layer 2D_Silen_Space_Meet2_Pod; door swing arcs extend the drawing to -2072 in y" },
-  "height_mm": 2290,
-  "height_note": "top of the 3D solids ($EXTMAX z = 2290.4); the 3D solids themselves are ACIS data that libredwg does not expand, so this comes from the drawing extents, not a mesh",
-  "front_aspect_width_over_height": 1.04
+  "source": "Silen_Space_Gen_2_Meet_2.dwg (manufacturer CAD, millimetres). The 3D solids were read out of the file's data storage section with tools/cad, flat faces only.",
+  "axes": "x to the right seen from the front, y from the back (0) to the front (-1107 to -1137), z up from the floor",
+  "footprint_mm": {
+    "width": 2380,
+    "depth": 1107,
+    "note": "door handles reach to -1137; door swing arcs extend the drawing to -2072"
+  },
+  "front_frame_mm": {
+    "width": 2380,
+    "height": 2230,
+    "height_note": "outer frame from the bottom rail (z 10) to about 2230; the floating roof reaches z 2265. Height is read from the geometry by eye to about 20 mm."
+  },
+  "front_aspect_width_over_height": 1.07,
+  "glass_panes_mm": {
+    "left": [
+      53,
+      670
+    ],
+    "door_leaf": [
+      670,
+      1710
+    ],
+    "right": [
+      1710,
+      2327
+    ],
+    "z": [
+      50,
+      2173
+    ],
+    "note": "x ranges from the left edge; the door leaf is the middle pane"
+  },
+  "note": "Features inside the pod (lights, table, sofas) sit 100 to 1000 mm behind the front plane, so a dot pinned to the front plane slides against them when the camera moves; see the README on 3D anchoring."
 }
