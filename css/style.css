@@ -1,10 +1,21 @@
+@import url(fonts/fonts.css);
+
+/* Look and feel follows silen.com: white pages, deep slate text, pale blue-grey surfaces, one soft blue
+   accent, 8px buttons and 16px cards, an airy geometric sans (DM Sans stands in for their PP Object Sans). */
 :root {
-  --bg: #111;
-  --fg: #fff;
-  --accent: #ffb400;
-  --accent-fg: #1a1400;
-  --glass: rgba(20, 20, 20, 0.78);
+  --ink: #2b3844;
+  --ink-2: #3b4a5c;
+  --ink-3: #6b7a89;
+  --surface: #eff2f4;
+  --line: #dde3e8;
+  --paper: #ffffff;
+  --blue: #aec5e7;
+  --blue-ink: #3366a4;
+  --r-btn: 8px;
+  --r-card: 16px;
+  --shadow: 0 6px 24px rgba(43, 56, 68, 0.18);
   --gutter: 16px;
+  --font: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -12,44 +23,92 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
   overflow: hidden;
   overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 button, a { font: inherit; }
 
+/* ---------- start screen ---------- */
+
 #start {
   height: 100%;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
   padding: var(--gutter);
-  text-align: center;
+  background: var(--paper);
 }
-#start h1 { margin: 0; font-size: 1.6rem; }
-#start p { margin: 0; max-width: 32ch; opacity: 0.85; line-height: 1.4; }
-#start small { opacity: 0.6; max-width: 34ch; }
-#error { color: #ff8a80; }
+#start .card {
+  width: 100%;
+  max-width: 560px;
+  padding: clamp(24px, 6vw, 48px);
+  border-radius: var(--r-card);
+  background: var(--blue);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+.eyebrow {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+#start h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 11vw, 3.6rem);
+  font-weight: 300;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+#start .lead { margin: 0; max-width: 34ch; font-size: 1.1rem; color: var(--ink); }
+#start .admin-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--r-btn);
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 0.9rem;
+}
+#start small { color: var(--ink-2); font-size: 0.85rem; max-width: 40ch; }
+#error { margin: 0; color: #b42318; font-weight: 500; }
 
-#startBtn, #resetBtn, #sheetLink {
+/* ---------- buttons ---------- */
+
+#startBtn, #sheetLink {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   border: 0;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-weight: 600;
-  padding: 14px 28px;
+  border-radius: var(--r-btn);
+  background: var(--ink);
+  color: #fff;
+  font-weight: 500;
+  padding: 12px 24px;
   min-height: 48px;
   text-decoration: none;
   cursor: pointer;
+  transition: background 0.15s;
+}
+#startBtn:hover, #sheetLink:hover { background: #1f2a34; }
+#startBtn:focus-visible, #sheetLink:focus-visible, #resetBtn:focus-visible, #sheetClose:focus-visible, .hotspot:focus-visible {
+  outline: 3px solid var(--blue-ink);
+  outline-offset: 2px;
 }
 
-#stage { position: fixed; inset: 0; touch-action: none; }
+/* ---------- camera view ---------- */
+
+#stage { position: fixed; inset: 0; touch-action: none; background: #000; }
 #stage[hidden], #start[hidden], #sheet[hidden], #error[hidden] { display: none; }
 
 #video {
@@ -64,11 +123,16 @@ button, a { font: inherit; }
   position: absolute;
   top: max(var(--gutter), env(safe-area-inset-top));
   left: var(--gutter); right: var(--gutter);
-  padding: 10px 14px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 12px 16px;
   border-radius: 12px;
-  background: var(--glass);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow);
   text-align: center;
   font-size: 0.95rem;
+  font-weight: 500;
   pointer-events: none;
 }
 #hint:empty { display: none; }
@@ -78,7 +142,21 @@ button, a { font: inherit; }
   bottom: max(var(--gutter), env(safe-area-inset-bottom));
   left: var(--gutter);
 }
-#resetBtn { padding: 10px 18px; min-height: 44px; background: var(--glass); color: var(--fg); font-weight: 500; }
+#resetBtn {
+  appearance: none;
+  border: 0;
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 500;
+  padding: 12px 20px;
+  min-height: 44px;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+#resetBtn:hover { background: #e4e9ed; }
+
+/* ---------- numbered dots ---------- */
 
 .hotspot {
   position: absolute;
@@ -92,29 +170,31 @@ button, a { font: inherit; }
   cursor: pointer;
   will-change: transform;
 }
-.hotspot::before {                      /* visible dot */
+.hotspot::before {                      /* visible dot: white with dark numeral, readable on any picture */
   content: attr(data-n);
   position: absolute; inset: 9px;
   display: grid; place-items: center;
   border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-weight: 700; font-size: 0.85rem;
-  box-shadow: 0 0 0 2px #fff, 0 2px 8px rgba(0, 0, 0, 0.5);
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 500; font-size: 0.85rem;
+  box-shadow: 0 0 0 3px rgba(174, 197, 231, 0.9), 0 2px 10px rgba(43, 56, 68, 0.45);
 }
 .hotspot::after {                       /* pulse ring */
   content: "";
   position: absolute; inset: 9px;
   border-radius: 50%;
-  border: 2px solid var(--accent);
+  border: 2px solid var(--paper);
   animation: pulse 1.8s ease-out infinite;
 }
-.hotspot.active::before { background: #fff; }
+.hotspot.active::before { background: var(--ink); color: #fff; }
 @keyframes pulse {
   from { transform: scale(1); opacity: 0.9; }
   to   { transform: scale(2.2); opacity: 0; }
 }
-@media (prefers-reduced-motion: reduce) { .hotspot::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .hotspot::after { animation: none; } #sheet { animation: none; } }
+
+/* ---------- feature card ---------- */
 
 #sheet {
   position: absolute;
@@ -122,21 +202,22 @@ button, a { font: inherit; }
   bottom: max(var(--gutter), env(safe-area-inset-bottom));
   max-width: 480px;
   margin: 0 auto;
-  padding: 18px 18px 18px;
-  border-radius: 18px;
-  background: rgba(20, 20, 20, 0.92);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  padding: 24px 24px 24px;
+  border-radius: var(--r-card);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow);
   animation: rise 0.18s ease-out;
 }
-#sheet h2 { margin: 0 32px 6px 0; font-size: 1.15rem; }
-#sheet p { margin: 0 0 14px; line-height: 1.45; opacity: 0.88; }
-#sheet a { display: inline-block; }
+#sheet h2 { margin: 0 40px 8px 0; font-size: 1.5rem; font-weight: 400; line-height: 1.2; }
+#sheet p { margin: 0 0 16px; color: var(--ink-2); }
+#sheet p:empty { display: none; }
+#sheet a { display: inline-flex; }
 #sheetClose {
-  position: absolute; top: 8px; right: 8px;
+  position: absolute; top: 10px; right: 10px;
   width: 44px; height: 44px;
-  border: 0; border-radius: 50%;
-  background: transparent; color: var(--fg);
-  font-size: 1.6rem; line-height: 1; cursor: pointer;
+  border: 0; border-radius: var(--r-btn);
+  background: var(--surface); color: var(--ink);
+  font-size: 1.5rem; line-height: 1; cursor: pointer;
 }
 @keyframes rise { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }

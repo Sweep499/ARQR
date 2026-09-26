@@ -3,6 +3,15 @@
 Scan a QR code, allow the camera, point it at a pod, and tap numbered dots to see what each part
 is and open its feature page. Runs entirely in the browser as a static site, so it works on GitHub Pages.
 
+## Look and feel
+
+The styling follows silen.com: white pages, deep slate text (`#2b3844`), pale blue-grey button surfaces
+(`#eff2f4`), a soft blue accent card (`#aec5e7`), 8 px buttons, 16 px cards, and an airy geometric sans. Silen's
+own typeface (PP Object Sans) is commercial, so the app uses DM Sans, which is free (SIL Open Font License) and
+is hosted in `css/fonts/` so the pages make no request to Google. No Silen logo or photographs are included;
+add them yourself if you have the right to. Colours and sizes are variables at the top of `css/style.css`.
+The admin page's outline stays amber so it shows up on any picture.
+
 ## Two pages
 
 | Page | URL | Shows the outline? | For |
