@@ -12,12 +12,13 @@ const sheet = $('sheet');
 
 const CORNER_NAMES = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
 const HANDLE_RADIUS = 32; // screen px within which a touch grabs a corner
-const HIDE_AFTER = 500;   // ms without a trustworthy motion estimate before the outline is greyed out and the dots hidden
-const DROP_AFTER = 2500;  // ms before the outline is dropped and the app goes back to looking for the pod
-const OFF_DROP = 3000;    // ms the outline may stay completely out of view before it is dropped (a guess drifts while unseen)
-const AGREE_MIN = 0.2;    // an outline whose overlap with the detector's mask stays below this is not on the pod
+const HIDE_AFTER = 400;   // ms without a trustworthy motion estimate before the outline is greyed out and the dots hidden
+const DROP_AFTER = 1500;  // ms before the outline is dropped and the app goes back to looking for the pod
+const OFF_DROP = 1500;    // ms the outline may stay completely out of view before it is dropped (a guess drifts while unseen)
+const AGREE_MIN = 0.4;    // an outline whose overlap with the detector's mask stays below this is not on the pod
+const ABSENT_FRAC = 0.02; // the detector's mask covers less of the picture than this: there is no pod in view
 const AGREE_STRIKES = 2;  // consecutive re-checks (about REDETECT_MS apart) before dropping it
-const REDETECT_MS = 1200; // how often the detector re-checks while an outline is showing
+const REDETECT_MS = 500;  // how often the detector re-checks while an outline is showing
 
 const params = new URLSearchParams(location.search);
 const debug = params.has('debug'); // ?debug logs each detector result to the console
@@ -217,12 +218,14 @@ async function runDetector() {
     if (placing.length || dragging >= 0) return;   // the user got there first
     const vw = video.videoWidth, vh = video.videoHeight;
 
-    // an outline the detector's mask does not support is wrong (drifted, or the pod is gone): drop it
-    if (quad && r.mask && !lostSince) {
-      const a = detector.agreement(r.mask, quad, vw, vh);
-      if (debug) console.log('agreement', a.toFixed(2));
-      strikes = a < AGREE_MIN ? strikes + 1 : 0;
-      if (strikes >= AGREE_STRIKES) { dropQuad('The outline drifted off the pod.'); return; }
+    // an outline the detector does not support is wrong: either there is no pod in view any more, or the
+    // pod is somewhere the outline is not (drifted). Two checks in a row (about a second) and it is deleted.
+    if (quad) {
+      const absent = (r.maskFrac ?? 1) < ABSENT_FRAC;
+      const a = absent || !r.mask ? 0 : detector.agreement(r.mask, quad, vw, vh);
+      if (debug) console.log(absent ? 'pod absent' : 'agreement ' + a.toFixed(2));
+      strikes = absent || a < AGREE_MIN ? strikes + 1 : 0;
+      if (strikes >= AGREE_STRIKES) { dropQuad(absent ? 'The pod went out of view.' : 'The outline drifted off the pod.'); return; }
     }
 
     if (r.quad) {

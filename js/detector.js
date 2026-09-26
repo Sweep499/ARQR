@@ -45,12 +45,12 @@ export class PodDetector {
     this.qctx = this.qcanvas.getContext('2d', { willReadFrequently: true });
   }
 
-  // -> { mask } plus, when a pod is found, either { clipped: true } (not fully in view) or { quad, score }
+  // -> { mask, maskFrac } plus, when a pod is found, either { clipped: true } (not fully in view) or { quad, score }
   // with the corners [TL, TR, BR, BL] in the video's own pixel coordinates. `mask` is the model's
   // pod-front mask (256x448, 255 = pod), which agreement() compares an outline against.
   async detect(video) {
     const vw = video.videoWidth, vh = video.videoHeight;
-    if (!vw || !vh) return { mask: null };
+    if (!vw || !vh) return { mask: null, maskFrac: 0 };
     this.ctx.drawImage(video, 0, 0, IN_W, IN_H);
     const px = this.ctx.getImageData(0, 0, IN_W, IN_H).data;
     const plane = IN_W * IN_H;
@@ -61,13 +61,15 @@ export class PodDetector {
     const out = await this.session.run({ image: new this.ort.Tensor('float32', input, [1, 3, IN_H, IN_W]) });
     const logits = out.logits.data;
     const mask = new Uint8Array(plane);
-    for (let i = 0; i < plane; i++) mask[i] = logits[i] > 0 ? 255 : 0;
+    let on = 0;
+    for (let i = 0; i < plane; i++) { mask[i] = logits[i] > 0 ? 255 : 0; on += mask[i] > 0; }
+    const maskFrac = on / plane;                  // how much of the picture the model calls pod; near 0 = no pod in view
     const r = this.outline(mask);
-    if (!r) return { mask };
-    if (r.clipped) return { mask, clipped: true };
+    if (!r) return { mask, maskFrac };
+    if (r.clipped) return { mask, maskFrac, clipped: true };
     const q = reduceToQuad(r.poly);
-    if (!q) return { mask };
-    return { mask, quad: q.map(([x, y]) => [x * vw / IN_W, y * vh / IN_H]), score: r.solidity };
+    if (!q) return { mask, maskFrac };
+    return { mask, maskFrac, quad: q.map(([x, y]) => [x * vw / IN_W, y * vh / IN_H]), score: r.solidity };
   }
 
   // How well an outline (video-pixel quad) matches a mask from detect(): intersection over union of the two
