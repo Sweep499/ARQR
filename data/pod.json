@@ -5,34 +5,42 @@
     {
       "id": "new-handle",
       "title": "New handle",
-      "text": "",
-      "url": "https://99cubes.de/en/products/meetingbooth-silen-space-meet-2-silen/?srsltid=AU7gw4UV_mr8HB0OGhTacMnrBAMXMCUeVTosnreHDgmqm9xtLF5OSzU0",
+      "text": "Täiesti unikaalne käepide!",
+      "url": "https://99cubes.de/wp-content/uploads/2026/03/99cubes-silen_space_gen2_door_handle-detailansicht.jpg",
       "x": 0.664,
       "y": 0.449
     },
     {
       "id": "new-lights",
       "title": "New lights",
-      "text": "",
-      "url": "https://99cubes.de/en/products/meetingbooth-silen-space-meet-2-silen/?srsltid=AU7gw4UV_mr8HB0OGhTacMnrBAMXMCUeVTosnreHDgmqm9xtLF5OSzU0",
+      "text": "Uus ja äge laelamp!",
+      "url": "https://99cubes.de/wp-content/uploads/2026/03/99cubes-silen_space_gen2_ledventilation-detailansicht.jpg",
       "x": 0.751,
       "y": 0.106
     },
     {
       "id": "new-roof",
       "title": "New roof",
-      "text": "",
-      "url": "https://99cubes.de/en/products/meetingbooth-silen-space-meet-2-silen/?srsltid=AU7gw4UV_mr8HB0OGhTacMnrBAMXMCUeVTosnreHDgmqm9xtLF5OSzU0",
+      "text": "Leviteeriv ja funktsionaalne lagi.",
+      "url": "https://99cubes.de/wp-content/uploads/2026/03/99cubes-silen_space_gen2_floating_roof-detailansicht.jpg",
       "x": 0.507,
       "y": 0
     },
     {
       "id": "control-panel",
       "title": "Control panel",
-      "text": "",
-      "url": "https://99cubes.de/en/products/meetingbooth-silen-space-meet-2-silen/?srsltid=AU7gw4UV_mr8HB0OGhTacMnrBAMXMCUeVTosnreHDgmqm9xtLF5OSzU0",
+      "text": "Meeletute võimalustega kontrollpaneel",
+      "url": "https://99cubes.de/wp-content/uploads/2026/03/99cubes-silen_space_gen2_control_panel-detailansicht.jpg",
       "x": 0.745,
       "y": 0.492
+    },
+    {
+      "id": "updated-furniture",
+      "title": "Updated furniture",
+      "text": "Erimööbel suhestub tootega hästi.",
+      "url": "https://99cubes.de/wp-content/uploads/2026/03/99cubes-silen_space_gen2_sofa-detailansicht.jpg",
+      "x": 0.831,
+      "y": 0.828
     }
   ]
 }
