@@ -46,7 +46,7 @@ async function reloadFromFile() {
   try {
     const j = await (await fetch('../data/pod.json')).json();
     S.meta = { name: j.name || 'Pod', note: j.note || S.meta.note };
-    S.hot = (j.hotspots || []).map((h) => ({ title: h.title || '', text: h.text || '', url: h.url || '', x: h.x ?? null, y: h.y ?? null }));
+    S.hot = (j.hotspots || []).map((h) => ({ title: h.title || '', text: h.text || '', url: h.url || '', embed: h.embed !== false, x: h.x ?? null, y: h.y ?? null }));
   } catch (e) {
     setStatus('Could not read data/pod.json: ' + e.message);
   }
@@ -332,6 +332,8 @@ function renderList() {
     $(id).value = f ? f[key] : '';
     $(id).disabled = !f;
   }
+  $('fEmbed').checked = f ? f.embed !== false : true;
+  $('fEmbed').disabled = !f;
 }
 
 function select(i) {
@@ -354,8 +356,14 @@ for (const [id, key] of [['fTitle', 'title'], ['fText', 'text'], ['fUrl', 'url']
   });
 }
 
+$('fEmbed').addEventListener('change', () => {
+  if (S.sel < 0) return;
+  S.hot[S.sel].embed = $('fEmbed').checked;
+  save();
+});
+
 $('add').addEventListener('click', () => {
-  S.hot.push({ title: 'New feature', text: '', url: '', x: null, y: null });
+  S.hot.push({ title: 'New feature', text: '', url: '', embed: true, x: null, y: null });
   save();
   select(S.hot.length - 1);
   $('fTitle').focus();
@@ -389,7 +397,7 @@ function buildJson() {
     let id = slug(h.title) || `point-${i + 1}`, k = 2;
     while (used.has(id)) id = `${slug(h.title) || 'point'}-${k++}`;
     used.add(id);
-    return { id, title: h.title, text: h.text, url: h.url, x: +h.x.toFixed(3), y: +h.y.toFixed(3) };
+    return { id, title: h.title, text: h.text, url: h.url, ...(h.embed === false ? { embed: false } : {}), x: +h.x.toFixed(3), y: +h.y.toFixed(3) };
   });
   return JSON.stringify({ name: S.meta.name, note: S.meta.note, hotspots }, null, 2) + '\n';
 }

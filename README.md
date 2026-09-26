@@ -109,6 +109,15 @@ corners. Expect to reject the close-ups where only part of a pane is found.
    (quads in pixels and normalised, plus `corners_inside` and `visible_frac` for filtering) to a folder.
    "Export JSON" writes only the labels. Labels autosave in the browser and can be re-imported.
 
+## Feature pages open inside the app
+
+"Open feature page" shows the page over the camera view. "Back to camera", the phone's Back button or Escape
+closes it and returns to the AR view, which keeps running underneath. The bar also has "Open in browser".
+Some websites refuse to be shown inside another page (silen.com does, with `X-Frame-Options: DENY`); for those
+set `"embed": false` on the feature (the placement page has a tick box) and it opens in a new tab instead.
+Check a site with `curl -sI <url>`: an `x-frame-options` or `content-security-policy: frame-ancestors` header
+means it will not embed. Pages you link to show their own cookie banners inside the frame.
+
 ## Place the feature dots
 
 `tools/hotspots.html` (serve the folder as below, open `http://localhost:8765/tools/hotspots.html`) sets the
@@ -132,8 +141,9 @@ You can edit `data/pod.json` by hand, or use the placement page above. Each hots
 | field | meaning |
 |---|---|
 | `title`, `text` | shown in the popup |
-| `url` | opened by the "Open feature page" button (opens in a new tab; many sites block embedding) |
+| `url` | opened by the "Open feature page" button, inside the app (see below) |
 | `x`, `y` | position on the pod's front frame: `x` 0 = left edge, 1 = right edge; `y` 0 = top, 1 = bottom |
+| `embed` | optional. `false` opens the link in a new tab instead of inside the app (see below) |
 
 The `example.com` links are placeholders.
 

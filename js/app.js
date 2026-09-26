@@ -64,6 +64,8 @@ let manual = false;       // the outline came from the user's taps or drags, so 
 let holdHintUntil = 0;    // keep a status message on screen until then
 let hotspotEls = [];
 let activeEl = null;
+let activeHotspot = null;  // the feature whose card is open
+let viewerOpen = false;   // the in-app page viewer is showing
 let hintTimer = 0;
 if (debug) window.podDebug = { get quad() { return quad; }, get tracker() { return tracker; }, set detector(d) { detector = d; }, get lost() { return lostSince; } };
 
@@ -166,7 +168,7 @@ function setHint(text, ms = 0) {
 }
 
 $('stage').addEventListener('pointerdown', (e) => {
-  if (e.target.closest('button, aside, a')) return;
+  if (e.target.closest('button, aside, a, #viewer')) return;
   if (USER_MODE) { closeSheet(); return; }   // nothing to place or drag: the outline is not shown
   const p = toVideo(e.clientX, e.clientY);
   if (!quad) {
@@ -312,6 +314,7 @@ function buildHotspots() {
 function openSheet(h, el) {
   if (activeEl) activeEl.classList.remove('active');
   activeEl = el;
+  activeHotspot = h;
   el.classList.add('active');
   $('sheetTitle').textContent = h.title;
   $('sheetText').textContent = h.text || '';
@@ -325,6 +328,53 @@ function closeSheet() {
   sheet.hidden = true;
   if (activeEl) activeEl.classList.remove('active');
   activeEl = null;
+}
+
+// ---------- in-app page viewer ----------
+
+// "Open feature page" shows the page over the camera view instead of leaving the app; Back to camera, the Back
+// button on the phone, or Escape returns to it. The camera and tracking keep running underneath. Some sites
+// refuse to be shown inside another page (silen.com does), so the bar always has "Open in browser", and a
+// feature can set "embed": false in data/pod.json to open in a new tab straight away.
+$('sheetLink').addEventListener('click', (e) => {
+  const h = activeHotspot;
+  if (!h || !h.url) return;
+  e.preventDefault();
+  if (h.embed === false) { window.open(h.url, '_blank', 'noopener'); return; }
+  openViewer(h);
+});
+$('viewerClose').addEventListener('click', closeViewer);
+window.addEventListener('popstate', () => { if (viewerOpen && !history.state?.viewer) hideViewer(); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && viewerOpen) closeViewer(); });
+
+// Closing pops the history entry openViewer added. If the person browsed inside the page, that Back only
+// steps the page's own history, so the viewer is hidden regardless a moment later.
+function closeViewer() {
+  if (!viewerOpen) return;
+  if (history.state?.viewer) history.back();
+  setTimeout(() => { if (viewerOpen) hideViewer(); }, 150);
+}
+
+function openViewer(h) {
+  $('viewerTitle').textContent = h.title || '';
+  $('viewerOpen').href = h.url;
+  $('viewerLoading').hidden = false;
+  const f = $('viewerFrame');
+  f.onload = () => { $('viewerLoading').hidden = true; };
+  $('viewer').hidden = false;
+  viewerOpen = true;
+  history.pushState({ viewer: true }, '');       // so the phone's Back button closes the viewer, not the app
+  f.contentWindow.location.replace(h.url);       // replace, not src: setting src would add a history entry of its own
+  $('viewerClose').focus();
+}
+
+function hideViewer() {
+  viewerOpen = false;
+  $('viewer').hidden = true;
+  const f = $('viewerFrame');
+  f.onload = null;
+  f.contentWindow.location.replace('about:blank'); // stops the page loading, playing sound or running
+  if (!$('sheet').hidden) $('sheetLink').focus();
 }
 
 // ---------- render loop ----------
