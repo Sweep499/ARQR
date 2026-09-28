@@ -19,8 +19,8 @@
       "title": "New lights",
       "text": "Uus ja äge laelamp!",
       "url": "https://99cubes.de/wp-content/uploads/2026/03/99cubes-silen_space_gen2_ledventilation-detailansicht.jpg",
-      "x": 0.751,
-      "y": 0.106
+      "x": 0.745,
+      "y": 0.11
     },
     {
       "id": "new-roof",
@@ -35,8 +35,8 @@
       "title": "Control panel",
       "text": "Meeletute võimalustega kontrollpaneel",
       "url": "https://99cubes.de/wp-content/uploads/2026/03/99cubes-silen_space_gen2_control_panel-detailansicht.jpg",
-      "x": 0.264,
-      "y": 0.485
+      "x": 0.162,
+      "y": 0.238
     },
     {
       "id": "updated-furniture",
@@ -45,6 +45,14 @@
       "url": "https://99cubes.de/wp-content/uploads/2026/03/99cubes-silen_space_gen2_sofa-detailansicht.jpg",
       "x": 0.831,
       "y": 0.828
+    },
+    {
+      "id": "new-feature",
+      "title": "New feature",
+      "text": "",
+      "url": "",
+      "x": 0.265,
+      "y": 0.783
     }
   ]
 }
