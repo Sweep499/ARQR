@@ -109,6 +109,37 @@ def segment(m, im, box):
     return mask, float(inter / union) if union else 0.0
 
 
+CORNER_PAD = 3  # px: see clamp_to_hull
+
+
+def clamp_to_hull(pt, poly):
+    """A corner produced by extending two edges to their intersection should not land far outside the shape
+    that was actually observed: extending two edges of a ROUNDED corner overshoots past the real corner by
+    roughly the rounding radius, more when the two edges meet at a shallow angle. Pulls such a point back
+    onto the polygon's own boundary (poly must be convex), with only a tiny fixed margin for the ordinary,
+    small overshoot a rounded corner is expected to have. (Same fix as js/detector.js.)"""
+    n = len(poly)
+    area2 = sum(poly[i][0] * poly[(i + 1) % n][1] - poly[(i + 1) % n][0] * poly[i][1] for i in range(n))
+    sign = 1 if area2 >= 0 else -1
+    inside, closest, closest_d = True, None, float("inf")
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        ex, ey = b[0] - a[0], b[1] - a[1]
+        if (ex * (pt[1] - a[1]) - ey * (pt[0] - a[0])) * sign < 0:
+            inside = False
+        len2 = ex * ex + ey * ey or 1
+        t = max(0.0, min(1.0, ((pt[0] - a[0]) * ex + (pt[1] - a[1]) * ey) / len2))
+        proj = (a[0] + t * ex, a[1] + t * ey)
+        d = np.hypot(pt[0] - proj[0], pt[1] - proj[1])
+        if d < closest_d:
+            closest_d, closest = d, proj
+    if inside or closest_d <= CORNER_PAD:
+        return pt
+    dx, dy = pt[0] - closest[0], pt[1] - closest[1]
+    dl = np.hypot(dx, dy) or 1
+    return np.array([closest[0] + dx / dl * CORNER_PAD, closest[1] + dy / dl * CORNER_PAD])
+
+
 def reduce_to_quad(poly):
     """Reduce a convex polygon to 4 corners by repeatedly dropping the edge whose removal adds the least
     area, extending its two neighbours until they meet. Unlike picking 4 of the vertices, this keeps
@@ -139,7 +170,8 @@ def reduce_to_quad(poly):
     q = np.array(v)
     tl, br = q[np.argmin(q.sum(1))], q[np.argmax(q.sum(1))]
     dd = q[:, 1] - q[:, 0]
-    return np.array([tl, q[np.argmin(dd)], br, q[np.argmax(dd)]])
+    q = np.array([tl, q[np.argmin(dd)], br, q[np.argmax(dd)]])
+    return np.array([clamp_to_hull(p, poly) for p in q])
 
 
 def outline(mask):

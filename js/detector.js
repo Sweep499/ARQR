@@ -122,6 +122,34 @@ export class PodDetector {
   }
 }
 
+// A corner produced by extending two edges to their intersection should not land far outside the shape that
+// was actually observed: extending two edges of a ROUNDED corner overshoots past the real corner by roughly
+// the rounding radius, more when the two edges meet at a shallow angle. Pulls such a point back onto the
+// polygon's own boundary (`poly` must be convex), with only a tiny fixed margin for the ordinary, small
+// overshoot a rounded corner is expected to have.
+const CORNER_PAD = 3; // px
+function clampToHull(pt, poly) {
+  const n = poly.length;
+  let area2 = 0;
+  for (let i = 0; i < n; i++) { const a = poly[i], b = poly[(i + 1) % n]; area2 += a[0] * b[1] - b[0] * a[1]; }
+  const sign = area2 >= 0 ? 1 : -1;
+  let inside = true, closest = null, closestD = Infinity;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    const ex = b[0] - a[0], ey = b[1] - a[1];
+    if ((ex * (pt[1] - a[1]) - ey * (pt[0] - a[0])) * sign < 0) inside = false;
+    const len2 = ex * ex + ey * ey || 1;
+    const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * ex + (pt[1] - a[1]) * ey) / len2));
+    const proj = [a[0] + t * ex, a[1] + t * ey];
+    const d = Math.hypot(pt[0] - proj[0], pt[1] - proj[1]);
+    if (d < closestD) { closestD = d; closest = proj; }
+  }
+  if (inside || closestD <= CORNER_PAD) return pt;
+  const dx = pt[0] - closest[0], dy = pt[1] - closest[1];
+  const dl = Math.hypot(dx, dy) || 1;
+  return [closest[0] + (dx / dl) * CORNER_PAD, closest[1] + (dy / dl) * CORNER_PAD];
+}
+
 // Reduces a convex polygon to 4 corners [TL, TR, BR, BL] by repeatedly dropping the edge whose removal adds
 // the least area, extending its two neighbours until they meet. (Same method as tools/prelabel/prelabel.py.)
 export function reduceToQuad(poly) {
@@ -151,6 +179,6 @@ export function reduceToQuad(poly) {
   const br = v.reduce((a, b) => (sum(b) > sum(a) ? b : a));
   const tr = v.reduce((a, b) => (diff(b) < diff(a) ? b : a));
   const bl = v.reduce((a, b) => (diff(b) > diff(a) ? b : a));
-  const q = [tl, tr, br, bl];
+  const q = [tl, tr, br, bl].map((p) => clampToHull(p, poly));
   return new Set(q).size === 4 ? q : null;
 }
