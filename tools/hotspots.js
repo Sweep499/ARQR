@@ -17,6 +17,7 @@ const DOT_R = 12;
 const MAX_SIDE = 1600;   // the picture is scaled down to this before use (all coordinates are in that space)
 const CORNERS = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
 const SAVE_KEY = 'podhotspots:v1';
+const DEFAULT_PHOTO = '../data/pod-photo.jpg';    // shown until someone opens their own photo or video
 const PUB_KEY = 'podhotspots:publish:v1';    // repository, branch and file (never the token)
 const TOKEN_KEY = 'podhotspots:token';
 
@@ -49,6 +50,16 @@ async function init() {
   renderFront();
   renderList();
   loadDetectorInBackground();
+  loadDefaultPhoto();                       // present from the start; "Open photo or video" replaces it any time
+}
+
+async function loadDefaultPhoto() {
+  try {
+    const img = new Image();
+    img.src = DEFAULT_PHOTO;
+    await img.decode();
+    setPicture(img, img.naturalWidth, img.naturalHeight);
+  } catch { /* no default shipped, or it failed to load: stay on the "open a photo" empty state */ }
 }
 
 async function reloadFromFile() {

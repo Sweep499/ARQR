@@ -173,8 +173,9 @@ so detail photos need no scrolling.
 `tools/hotspots.html` (serve the folder as below, open `http://localhost:8765/tools/hotspots.html`) sets the
 numbered dots without measuring anything by hand:
 
-1. "Open photo or video" with a straight-on picture of the pod front, standing back so the whole front is in
-   view. For a video, use the slider to pick a frame.
+1. The page opens with a default photo already loaded (`data/pod-photo.jpg`), so there is something to place
+   points on right away. "Open photo or video" replaces it with your own straight-on picture of the pod front,
+   standing back so the whole front is in view; for a video, use the slider to pick a frame.
 2. The outline is found automatically. If the whole front is not in view it says so; click the four corners
    instead (top-left, top-right, bottom-right, bottom-left) and drag them to fine-tune.
 3. The list starts with what is in `data/pod.json`. Select a feature (or "+ Add feature"), then click its spot
