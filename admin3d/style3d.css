@@ -1,0 +1,40 @@
+/* 3D admin test view: same look as the live app (css/style.css), with a distinct accent for 3D dots and a
+   small on-screen diagnostic panel that has no place in the production pages. */
+
+.badge3d { color: var(--pink, #a21caf); }
+
+.hotspot3d {
+  position: absolute; left: 0; top: 0;
+  width: 44px; height: 44px;
+  margin: -22px 0 0 -22px;
+  border: 0; padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: auto;
+  cursor: pointer;
+  will-change: transform;
+}
+.hotspot3d::before {
+  content: attr(data-n);
+  position: absolute; inset: 9px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: #ff6bd6;
+  color: #1a0512;
+  font-weight: 700; font-size: 0.85rem;
+  box-shadow: 0 0 0 3px rgba(255, 107, 214, 0.35), 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+.hotspot3d.active::before { background: #fff; }
+
+#diag {
+  position: absolute;
+  left: var(--gutter); bottom: max(64px, calc(env(safe-area-inset-bottom) + 56px));
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(20, 10, 24, 0.7);
+  color: #ffb6ec;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+#diag:empty { display: none; }

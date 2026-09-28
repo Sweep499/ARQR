@@ -60,6 +60,37 @@ control; it stays hidden otherwise rather than showing a control that does nothi
 Switching lens or moving the zoom is a different picture, so the outline (and any placing in progress) is
 cleared and the app looks for the pod again.
 
+## 3D admin (depth testing, separate from the live app)
+
+An experiment in giving each dot a real depth, so it stops sliding against its real feature (a light, the
+table, a sofa) as the camera moves sideways &mdash; the parallax a flat 2D dot cannot account for. Kept
+completely separate from the live 2D system on purpose: **the live app, `index.html`, `user/index.html`,
+`js/app.js` and `data/pod.json` are untouched by any of this**, and this system reads and writes only its own
+files. It is not linked from the public site or the admin page; reaching it means typing the URL.
+
+Three pieces:
+
+* **`data/pod-3d.json`** &mdash; its own front size and its own list of points, each stored as real
+  `x_mm, y_mm, z_mm` in the pod's own 3D frame (not a fraction of the frame like `data/pod.json`). `z_mm` is
+  depth behind the front glass, into the pod; `z_mm: 0` is on the glass itself.
+* **`tools/hotspots3d.html`** &mdash; places points and gathers their depth. Opens the same default photo as
+  the 2D tool, finds the outline the same way, and adds one field per point: depth in mm. Clicking the photo
+  and a depth together fully determine the 3D position, via the camera pose the outline gives (the same
+  `solvePnP` fit that keeps the live app's outline a rectangle, `js/pose3d.js`): the point is where the ray
+  through the clicked pixel crosses the plane at that depth. Editing the depth afterwards re-solves x, y from
+  the same click; typing x/y by hand instead detaches that link, as expected. Publishes to `data/pod-3d.json`
+  with its own copy of the GitHub-publish dialog (a separate remembered token from the 2D tool, on purpose).
+* **`admin3d/`** &mdash; the live test. Runs the exact same pod detection, tracking, and mask-alignment as the
+  live app (the same shared `js/tracker.js`, `js/detector.js`, `js/align.js`, `js/camera.js` modules,
+  imported fresh into a separate page with no shared state), but projects each point through the current
+  camera pose instead of a flat homography. Not linked anywhere; open it directly and allow the camera.
+
+**A single photo can never prove a depth number is right** &mdash; that is a hard limit of one camera view,
+not a gap in the tool. `tools/hotspots3d.html` can only place a point *consistently* with a chosen depth, not
+verify it. The real test is `admin3d/`: walk sideways with a phone. A wrong depth makes the dot visibly slide
+against the real feature; a correct one stays glued to it. Depth values themselves come from a tape measure,
+the manufacturer's CAD drawing, or a good estimate &mdash; typed in, not derived automatically.
+
 ## Two pages
 
 | Page | URL | Shows the outline? | For |

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>3D pod test (admin)</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="style3d.css">
+</head>
+<body>
+  <section id="start">
+    <div class="card">
+      <p class="eyebrow badge3d">3D &middot; admin testing only</p>
+      <h1>Test 3D depth.</h1>
+      <p class="lead">Runs the same pod tracking as the live app, but positions each dot with real depth
+        (from <code>data/pod-3d.json</code>) instead of pinning it flat to the glass. Walking sideways is the
+        actual test: a wrong depth makes a dot slide against its real feature; a correct one stays put.</p>
+      <p class="admin-note">Not linked from the public site or the admin page. Nothing here changes the live
+        2D app, which keeps using <code>data/pod.json</code> exactly as before.</p>
+      <button id="startBtn" type="button">Start camera <span aria-hidden="true">&#8599;</span></button>
+      <p id="error" role="alert" hidden></p>
+      <small>The camera image stays on your device. Nothing is uploaded.</small>
+    </div>
+  </section>
+
+  <main id="stage" hidden>
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="overlay"></canvas>
+    <div id="hotspots"></div>
+
+    <div class="cam-controls">
+      <button id="camBtn" type="button" hidden aria-label="Camera settings" aria-haspopup="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8a2 2 0 0 1 2-2h1.2l.9-1.4A2 2 0 0 1 9.8 3.6h4.4a2 2 0 0 1 1.7 1L16.8 6H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="12.5" r="3.4"/></svg>
+      </button>
+      <div id="camPanel" hidden>
+        <div id="camLenses" hidden></div>
+        <label id="camZoomRow"><span id="camZoomLabel">Zoom</span><input id="camZoom" type="range" hidden></label>
+      </div>
+    </div>
+
+    <div id="diag"></div>
+    <div id="hint" role="status"></div>
+    <div class="toolbar">
+      <button id="resetBtn" type="button">Find pod again</button>
+    </div>
+
+    <aside id="sheet" hidden aria-live="polite">
+      <button id="sheetClose" type="button" aria-label="Close">&times;</button>
+      <h2 id="sheetTitle"></h2>
+      <p id="sheetText"></p>
+      <a id="sheetLink" target="_blank" rel="noopener">Open feature page &#8599;</a>
+    </aside>
+  </main>
+
+  <script type="module" src="app3d.js"></script>
+</body>
+</html>

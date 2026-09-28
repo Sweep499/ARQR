@@ -1,0 +1,9 @@
+{
+  "name": "Silen single-person pod (3D, admin testing only)",
+  "note": "x_mm/y_mm are position across the pod's front frame (0,0 = top-left outer corner, same axes as front_mm); z_mm is depth in millimetres behind the front glass, into the pod (0 = on the glass). Gathered and used by the tools/hotspots3d.html + admin3d/ pair; unrelated to data/pod.json used by the live 2D app.",
+  "front_mm": {
+    "width": 2380,
+    "height": 2230
+  },
+  "points": []
+}
