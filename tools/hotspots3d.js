@@ -426,6 +426,22 @@ $('del').addEventListener('click', () => {
   S.sel = Math.min(S.sel, S.points.length - 1);
   save(); renderList(); draw();
 });
+$('import2d').addEventListener('click', async () => {
+  const front = S.meta.front_mm;
+  if (!front || !(front.width > 0) || !(front.height > 0)) { setStatus('Set the pod front size below first (needed to convert the 2D fractions to mm).'); return; }
+  let j;
+  try { j = await (await fetch('../data/pod.json')).json(); } catch (e) { setStatus('Could not read data/pod.json: ' + e.message); return; }
+  const existing = new Set(S.points.map((p) => p.title));
+  let added = 0, skipped = 0;
+  for (const h of j.hotspots || []) {
+    if (existing.has(h.title)) { skipped++; continue; }   // already imported (by title); avoid duplicating on a second click
+    S.points.push({ title: h.title, text: h.text || '', url: h.url || '', embed: h.embed !== false, x_mm: h.x * front.width, y_mm: h.y * front.height, z_mm: 0, _px: null });
+    added++;
+  }
+  save(); renderList(); draw();
+  setStatus(`Imported ${added} point${added === 1 ? '' : 's'} from data/pod.json at depth 0` + (skipped ? ` (${skipped} already here, skipped)` : '') + '. Set each one\'s real depth, then verify in admin3d/.');
+});
+
 $('reload').addEventListener('click', async () => {
   await reloadFromFile();
   S.sel = -1;
