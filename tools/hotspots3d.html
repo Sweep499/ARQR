@@ -42,6 +42,10 @@
     .front .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .btns { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 10px; border-top: 1px solid var(--line); }
     footer { padding: 6px 12px; background: var(--panel); border-top: 1px solid var(--line); grid-column: 1 / -1; }
+
+    #draftBanner { display: block; margin-top: 4px; padding: 6px 10px; border-radius: 6px; background: #4a3410; color: #ffd48a; font-size: 13px; }
+    #draftBanner[hidden] { display: none; }
+    #draftBanner button { background: #2a2f38; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; font: inherit; cursor: pointer; margin-left: 6px; }
     #status { font-variant-numeric: tabular-nums; }
     dialog { width: min(520px, calc(100vw - 24px)); background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
     dialog::backdrop { background: rgba(0, 0, 0, .6); }
@@ -115,6 +119,7 @@
     <footer>
       <span id="status" role="status">Open a photo or video to start.</span>
       <span class="dim"> &middot; click a feature, set its depth, then click its spot on the picture &middot; drag a dot or a corner to fine-tune</span>
+      <span id="draftBanner" hidden>This browser has an unpublished draft saved locally (<span id="draftCount"></span>), from a previous visit. <button type="button" id="draftUse">Use it instead</button> <button type="button" id="draftDiscard">Discard it</button></span>
     </footer>
   </main>
 

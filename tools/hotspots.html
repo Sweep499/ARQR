@@ -57,6 +57,10 @@
     #pubStatus.ok { color: #6be3a4; }
     dialog .btns { padding: 6px 0 0; border: 0; justify-content: flex-end; }
     footer { padding: 6px 12px; background: var(--panel); border-top: 1px solid var(--line); }
+
+    #draftBanner { display: block; margin-top: 4px; padding: 6px 10px; border-radius: 6px; background: #4a3410; color: #ffd48a; font-size: 13px; }
+    #draftBanner[hidden] { display: none; }
+    #draftBanner button { background: #2a2f38; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; font: inherit; cursor: pointer; margin-left: 6px; }
     #status { font-variant-numeric: tabular-nums; }
     .dim { color: var(--dim); }
     @media (max-width: 800px) { main { grid-template-columns: 1fr; grid-template-rows: 1fr 300px; } aside { border-left: 0; border-top: 1px solid var(--line); } }
@@ -107,6 +111,7 @@
   <footer>
     <span id="status" role="status">Open a photo or video to start.</span>
     <span class="dim"> &middot; click a feature in the list, then click its spot on the picture &middot; drag a dot or a corner to fine-tune</span>
+    <span id="draftBanner" hidden>This browser has an unpublished draft saved locally (<span id="draftCount"></span>), from a previous visit. <button type="button" id="draftUse">Use it instead</button> <button type="button" id="draftDiscard">Discard it</button></span>
   </footer>
 
 

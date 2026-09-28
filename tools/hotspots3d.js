@@ -43,14 +43,33 @@ window.podHotspots3d = S;
 
 async function init() {
   try { S.baseText = await (await fetch(DATA_FILE)).text(); } catch { S.baseText = null; }
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { /* private mode */ }
-  if (saved && Array.isArray(saved.points)) { S.points = saved.points; S.meta = { ...S.meta, ...saved.meta }; }
-  else await reloadFromFile();
+  await reloadFromFile();                   // always start from what is actually published, never a stale local guess
+  offerLocalDraft();                        // a real (non-empty) draft in this browser is offered, never applied silently
   renderFront();
   renderList();
   loadDetectorInBackground();
   loadDefaultPhoto();
+}
+
+// A browser can hold an unpublished draft from a previous visit (localStorage). Silently preferring it over
+// the published file - the old behaviour - once hid a freshly-published import behind an empty leftover
+// draft from an earlier, briefer visit. So it is only ever offered, never applied without asking.
+function offerLocalDraft() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { /* private mode */ }
+  if (!saved || !Array.isArray(saved.points) || !saved.points.length) { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } return; }
+  $('draftCount').textContent = `${saved.points.length} point${saved.points.length === 1 ? '' : 's'}`;
+  $('draftBanner').hidden = false;
+  $('draftUse').onclick = () => {
+    S.points = saved.points; const dm = saved.meta || {}; S.meta = { ...S.meta, ...dm, front_mm: (dm.front_mm && dm.front_mm.width > 0 && dm.front_mm.height > 0) ? dm.front_mm : S.meta.front_mm };
+    $('draftBanner').hidden = true;
+    renderFront(); renderList(); draw();
+    setStatus('Restored the local draft from this browser.');
+  };
+  $('draftDiscard').onclick = () => {
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+    $('draftBanner').hidden = true;
+  };
 }
 
 async function reloadFromFile() {
