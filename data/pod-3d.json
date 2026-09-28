@@ -22,7 +22,7 @@
       "url": "https://99cubes.de/wp-content/uploads/2026/03/99cubes-silen_space_gen2_ledventilation-detailansicht.jpg",
       "x_mm": 1773.1,
       "y_mm": 245.3,
-      "z_mm": 0
+      "z_mm": 500
     },
     {
       "id": "new-roof",
@@ -40,7 +40,7 @@
       "url": "https://99cubes.de/wp-content/uploads/2026/03/99cubes-silen_space_gen2_control_panel-detailansicht.jpg",
       "x_mm": 385.6,
       "y_mm": 530.7,
-      "z_mm": 0
+      "z_mm": 30
     },
     {
       "id": "updated-furniture",
@@ -49,16 +49,7 @@
       "url": "https://99cubes.de/wp-content/uploads/2026/03/99cubes-silen_space_gen2_sofa-detailansicht.jpg",
       "x_mm": 1977.8,
       "y_mm": 1846.4,
-      "z_mm": 0
-    },
-    {
-      "id": "new-feature",
-      "title": "New feature",
-      "text": "",
-      "url": "",
-      "x_mm": 630.7,
-      "y_mm": 1746.1,
-      "z_mm": 0
+      "z_mm": 600
     }
   ]
 }
