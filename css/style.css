@@ -285,3 +285,54 @@ button, a { font: inherit; }
 #viewerImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--surface); }
 #viewerImg[hidden], #viewerFrame[hidden] { display: none; }
 #viewerLoading[hidden] { display: none; }
+
+/* ---------- camera controls (lens switcher, zoom) ---------- */
+
+.cam-controls {
+  position: absolute;
+  top: max(var(--gutter), env(safe-area-inset-top));
+  right: var(--gutter);
+  z-index: 5;
+}
+#camBtn {
+  appearance: none;
+  width: 44px; height: 44px;
+  border: 0; border-radius: 50%;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  display: grid; place-items: center;
+  cursor: pointer;
+}
+#camBtn[hidden] { display: none; }
+#camPanel {
+  position: absolute;
+  top: 52px; right: 0;
+  min-width: 200px;
+  max-width: calc(100vw - 2 * var(--gutter) - 8px);
+  padding: 10px;
+  border-radius: var(--r-card);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#camPanel[hidden] { display: none; }
+#camLenses { display: flex; flex-direction: column; gap: 4px; }
+#camLenses[hidden] { display: none; }
+#camLenses button {
+  appearance: none;
+  border: 0; border-radius: var(--r-btn);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+#camLenses button.active { background: var(--ink); color: #fff; }
+#camZoomRow { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: var(--ink-2); }
+#camZoom[hidden] { display: none; }
+#camZoom { width: 100%; accent-color: var(--blue-ink); }

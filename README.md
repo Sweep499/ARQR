@@ -42,6 +42,24 @@ picture). The detector used never saw this clip. Higher is better.
   rather than exact corners. Treat differences of about 0.02 as noise. A clip with the whole pod front in view at
   the start would show more (the detector can then re-anchor the outline with exact corners).
 
+## Camera controls
+
+Both pages show a small camera button (top-right of the camera view) when the phone offers something to
+control; it stays hidden otherwise rather than showing a control that does nothing:
+
+- **Lens switcher**, when the phone reports more than one camera. If one is labelled as a wide-angle or
+  ultra-wide lens, that one is opened automatically at startup, since it is the practical answer to "too
+  close to the pod, need a wider view" &mdash; a browser cannot invent field of view that a lens does not
+  have, but it can pick the lens that has more of it. The picker still lets you choose a different one; if
+  the wide lens is not actually wider (mislabelled, or a telephoto), pick from the list instead.
+- **Zoom slider**, when the phone's camera reports a hardware zoom range (`js/camera.js`, the `zoom`
+  constraint). On some phones this range goes below 1&times; and switches to a wider lens internally; the
+  slider allows that too, and is labelled to say so. Not supported on every phone or browser (notably, no
+  Safari on iOS as of this writing); the app still works without it, just without the slider.
+
+Switching lens or moving the zoom is a different picture, so the outline (and any placing in progress) is
+cleared and the app looks for the pod again.
+
 ## Two pages
 
 | Page | URL | Shows the outline? | For |

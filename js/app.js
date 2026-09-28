@@ -3,6 +3,7 @@ import { loadOpenCV, FlowTracker } from './tracker.js';
 import { loadDetector } from './detector.js';
 import { fitRectangle } from './pose.js';
 import { alignToMask } from './align.js';
+import { CameraControl } from './camera.js';
 
 // Two pages share this code. The admin page (index.html) draws the outline the app has found, so an
 // administrator can check what it does. The user page (user/index.html, data-mode="user") tracks exactly
@@ -71,6 +72,7 @@ let dragging = -1;
 let tracker = null;
 let cvRef = null;         // OpenCV, for the rectangle fit
 let front = null;         // the pod front's real size in mm { width, height }, from data/pod.json
+let camera = null;        // live camera control (lens switching, zoom); null in ?src= dev mode, no live camera
 let detector = null;      // finds the pod front automatically once its model has loaded
 let detecting = false;
 let lastDetect = 0;
@@ -85,7 +87,7 @@ let activeEl = null;
 let activeHotspot = null;  // the feature whose card is open
 let viewerOpen = false;   // the in-app page viewer is showing
 let hintTimer = 0;
-if (debug) window.podDebug = { get quad() { return quad; }, set quad(q) { quad = q; manual = false; lostSince = 0; offSince = 0; }, get tracker() { return tracker; }, get front() { return front; }, set detector(d) { detector = d; }, get lost() { return lostSince; } };
+if (debug) window.podDebug = { get quad() { return quad; }, set quad(q) { quad = q; manual = false; lostSince = 0; offSince = 0; }, get tracker() { return tracker; }, get front() { return front; }, set detector(d) { detector = d; }, get lost() { return lostSince; }, get camera() { return camera; } };
 
 // ---------- start-up ----------
 
@@ -130,15 +132,11 @@ async function openVideoSource() {
     await playVideo();
     return;
   }
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error('This browser cannot open the camera. Try Safari or Chrome over https.');
-  }
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-    audio: false,
-  });
-  video.srcObject = stream;
-  await playVideo();
+  camera = new CameraControl(video);
+  await camera.open();                       // the phone's default back camera, and its list of cameras
+  const wide = camera.preferredWide();
+  if (wide) await camera.open(wide).catch(() => {});   // prefer a wide lens when the phone has one; keep the default otherwise
+  setUpCameraControls();
 }
 
 // play() rejects with AbortError if the page is backgrounded mid-start; the autoplay attribute still resumes it.
@@ -149,6 +147,55 @@ async function playVideo() {
     if (e?.name !== 'AbortError') throw e;
   }
 }
+
+// ---------- camera controls: switching lens, zoom ----------
+// Both are feature-detected: a phone with one fixed lens and no zoom capability shows neither. Changing
+// either invalidates any outline in view (the picture is now a different one), so placing starts over.
+
+function setUpCameraControls() {
+  const many = camera.devices.length > 1;
+  const zoom = camera.zoomRange();
+  $('camBtn').hidden = !many && !zoom;
+  if (!$('camBtn').hidden) buildCameraPanel();
+}
+
+function buildCameraPanel() {
+  const list = $('camLenses');
+  list.textContent = '';
+  list.hidden = camera.devices.length <= 1;
+  camera.devices.forEach((d, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = camera.labelFor(i);
+    b.className = d.deviceId === camera.deviceId ? 'active' : '';
+    b.addEventListener('click', () => switchLens(d.deviceId));
+    list.appendChild(b);
+  });
+  const zoom = camera.zoomRange();
+  const slider = $('camZoom');
+  slider.hidden = !zoom;
+  if (zoom) {
+    slider.min = zoom.min; slider.max = zoom.max; slider.step = zoom.step; slider.value = zoom.value;
+    $('camZoomLabel').textContent = zoom.min < 1 ? 'Zoom (below 1× is wider than normal)' : 'Zoom';
+  }
+}
+
+async function switchLens(deviceId) {
+  $('camPanel').hidden = true;
+  const hadQuad = !!quad;
+  try {
+    await camera.open(deviceId);
+  } catch (e) {
+    setHint('Could not switch camera: ' + (e?.message || e));
+    return;
+  }
+  buildCameraPanel();
+  if (hadQuad || placing.length) beginPlacing();   // a different lens is a different picture; start fresh
+}
+
+$('camBtn').addEventListener('click', () => { $('camPanel').hidden = !$('camPanel').hidden; if (!$('camPanel').hidden) buildCameraPanel(); });
+$('camZoom').addEventListener('input', (e) => camera.setZoom(parseFloat(e.target.value)));
+document.addEventListener('pointerdown', (e) => { if (!$('camPanel').hidden && !e.target.closest('#camPanel, #camBtn')) $('camPanel').hidden = true; });
 
 function friendlyError(e) {
   if (e?.name === 'NotAllowedError') return 'Camera access was blocked. Allow the camera for this site in your browser settings and try again.';

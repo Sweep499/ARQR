@@ -26,6 +26,17 @@
     <div id="hotspots"></div>
 
     <div id="hint" role="status"></div>
+
+    <div class="cam-controls">
+      <button id="camBtn" type="button" hidden aria-label="Camera settings" aria-haspopup="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8a2 2 0 0 1 2-2h1.2l.9-1.4A2 2 0 0 1 9.8 3.6h4.4a2 2 0 0 1 1.7 1L16.8 6H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="12.5" r="3.4"/></svg>
+      </button>
+      <div id="camPanel" hidden>
+        <div id="camLenses" hidden></div>
+        <label id="camZoomRow"><span id="camZoomLabel">Zoom</span><input id="camZoom" type="range" hidden></label>
+      </div>
+    </div>
+
     <div class="toolbar">
       <button id="resetBtn" type="button">Find pod again</button>
     </div>
