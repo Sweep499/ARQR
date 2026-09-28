@@ -5,7 +5,7 @@
 import { squareToQuad, applyH, invertH } from '../js/geometry.js';
 import { loadOpenCV } from '../js/tracker.js';
 import { loadDetector } from '../js/detector.js';
-import { publishFile, PublishError } from './github-publish.js';
+import { publishFile, publishBinary, PublishError } from './github-publish.js';
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -26,7 +26,8 @@ const S = {
   video: null,           // set when a video was opened
   quad: null,            // [TL, TR, BR, BL] in src pixels
   placing: [],           // corners clicked so far
-  hot: [],               // [{ title, text, url, x, y }]  x / y null = not placed yet
+  hot: [],               // [{ title, text, url, x, y, _pdfFile }]  x / y null = not placed yet; _pdfFile = a chosen
+                         // PDF not yet uploaded (in-memory only, never saved to localStorage or exported directly)
   meta: { name: 'Pod', note: 'x and y are positions on the pod\'s front frame: x 0 = left edge, x 1 = right edge; y 0 = top edge, y 1 = bottom edge.' },
   sel: -1,
   drag: null,            // { type: 'corner' | 'dot', i }
@@ -89,7 +90,7 @@ async function reloadFromFile() {
 }
 
 function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ hot: S.hot, meta: S.meta })); } catch { /* ignore */ }
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ hot: S.hot.map(({ _pdfFile, ...h }) => h), meta: S.meta })); } catch { /* ignore */ }
 }
 
 async function loadDetectorInBackground() {
@@ -370,7 +371,20 @@ function renderList() {
   }
   $('fEmbed').checked = f ? f.embed !== false : true;
   $('fEmbed').disabled = !f;
+  renderPdfField(f);
 }
+
+function renderPdfField(f) {
+  $('fPdf').disabled = !f;
+  const pending = f && f._pdfFile;
+  $('fPdfName').textContent = pending ? `${f._pdfFile.name} (uploads on publish)` : (f && isOwnPdfUrl(f.url) ? '(already uploaded PDF; choosing a new one replaces it)' : '');
+  $('fPdfClear').hidden = !pending;
+  $('fUrl').disabled = !f || pending;   // one or the other, never both, while a PDF is queued
+}
+
+// True when a hotspot's link already points at a PDF this same tool uploaded (data/docs/<id>.pdf), so the
+// name field can say so instead of showing nothing.
+function isOwnPdfUrl(url) { return /\/data\/docs\/[^/]+\.pdf$/i.test(url || ''); }
 
 function select(i) {
   S.sel = i;
@@ -396,6 +410,22 @@ $('fEmbed').addEventListener('change', () => {
   if (S.sel < 0) return;
   S.hot[S.sel].embed = $('fEmbed').checked;
   save();
+});
+
+const MAX_PDF_BYTES = 1_000_000; // matches github-publish.js's publishBinary limit; checked here too for an immediate message
+$('fPdf').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file || S.sel < 0) return;
+  if (file.size > MAX_PDF_BYTES) { setStatus(`That PDF is ${(file.size / 1e6).toFixed(1)} MB; it needs to be under 1 MB to publish this way.`); return; }
+  S.hot[S.sel]._pdfFile = file;
+  renderPdfField(S.hot[S.sel]);
+  setStatus(`"${file.name}" will upload to the repo when you publish, replacing the link for "${S.hot[S.sel].title || 'this feature'}".`);
+});
+$('fPdfClear').addEventListener('click', () => {
+  if (S.sel < 0) return;
+  S.hot[S.sel]._pdfFile = null;
+  renderPdfField(S.hot[S.sel]);
 });
 
 $('add').addEventListener('click', () => {
@@ -427,14 +457,22 @@ $('clearAll').addEventListener('click', () => {
 
 const slug = (t) => t.toLowerCase().normalize('NFKD').replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '');
 
-function buildJson() {
-  const used = new Set();
-  const hotspots = S.hot.filter((h) => h.x != null).map((h, i) => {
+// The id each placed hotspot exports (and publishes attached PDFs) under, keyed by object identity so a
+// PDF upload and the JSON export always agree on the same path for the same hotspot.
+function idsFor(placedHot) {
+  const used = new Set(), ids = new Map();
+  placedHot.forEach((h, i) => {
     let id = slug(h.title) || `point-${i + 1}`, k = 2;
     while (used.has(id)) id = `${slug(h.title) || 'point'}-${k++}`;
-    used.add(id);
-    return { id, title: h.title, text: h.text, url: h.url, ...(h.embed === false ? { embed: false } : {}), x: +h.x.toFixed(3), y: +h.y.toFixed(3) };
+    used.add(id); ids.set(h, id);
   });
+  return ids;
+}
+
+function buildJson() {
+  const placed = S.hot.filter((h) => h.x != null);
+  const ids = idsFor(placed);
+  const hotspots = placed.map((h) => ({ id: ids.get(h), title: h.title, text: h.text, url: h.url, ...(h.embed === false ? { embed: false } : {}), x: +h.x.toFixed(3), y: +h.y.toFixed(3) }));
   const front = S.meta.front_mm && S.meta.front_mm.width > 0 && S.meta.front_mm.height > 0 ? { front_mm: { width: S.meta.front_mm.width, height: S.meta.front_mm.height } } : {};
   return JSON.stringify({ name: S.meta.name, note: S.meta.note, ...front, hotspots }, null, 2) + '\n';
 }
@@ -472,6 +510,15 @@ function defaultRepo() {
   const repo = location.pathname.split('/')[1];
   return m && repo ? `${m[1]}/${repo}` : 'Sweep499/ARQR';
 }
+
+// Where an uploaded PDF ends up being servable, regardless of where this tool itself is being run from
+// (the live site, or a local test server): a GitHub Pages project site at <owner>.github.io/<repo>/.
+function pagesBaseUrl(repo) {
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/);
+  if (m) return `https://${location.hostname}/${location.pathname.split('/')[1] || repo.split('/')[1]}/`;
+  const [owner, name] = repo.split('/');
+  return `https://${owner}.github.io/${name}/`;
+}
 function readPubPrefs() {
   try { return JSON.parse(localStorage.getItem(PUB_KEY)) || {}; } catch { return {}; }
 }
@@ -507,8 +554,8 @@ $('pubForget').addEventListener('click', () => {
 });
 
 async function runPublish(force) {
-  const placed = S.hot.filter((h) => h.x != null).length;
-  if (!placed) { pubStatus('Place at least one feature on the picture first.', 'err'); return; }
+  const placedCount = S.hot.filter((h) => h.x != null).length;
+  if (!placedCount) { pubStatus('Place at least one feature on the picture first.', 'err'); return; }
   const token = $('pubToken').value.trim();
   const prefs = { repo: $('pubRepo').value.trim(), branch: $('pubBranch').value.trim() || 'main', path: $('pubPath').value.trim() || 'data/pod.json', msg: $('pubMsg').value.trim() || 'Update feature points (placement tool)' };
   try {
@@ -517,9 +564,29 @@ async function runPublish(force) {
     (pub.querySelector('#pubRemember').checked ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
   } catch { /* private mode: the token just is not remembered */ }
 
-  const text = buildJson();
   $('pubGo').disabled = $('pubForce').disabled = true;
   $('pubForce').hidden = true;
+
+  // any attached PDFs go up first, so the JSON below can reference their real, now-live addresses
+  const placed = S.hot.filter((h) => h.x != null);
+  const ids = idsFor(placed);
+  for (const h of placed) {
+    if (!h._pdfFile) continue;
+    const id = ids.get(h), path = `data/docs/${id}.pdf`;
+    pubStatus(`Uploading ${h._pdfFile.name}...`);
+    try {
+      await publishBinary({ token, repo: prefs.repo, branch: prefs.branch, path, blob: h._pdfFile, message: `Add ${id}.pdf (placement tool)` });
+    } catch (e) {
+      pubStatus(`Could not upload "${h._pdfFile.name}": ${e instanceof PublishError ? e.message : e.message}`, 'err');
+      $('pubGo').disabled = $('pubForce').disabled = false;
+      return; // stop before touching pod.json, so it never references a PDF that failed to upload
+    }
+    h.url = pagesBaseUrl(prefs.repo) + path;
+    h._pdfFile = null;
+  }
+  renderList(); draw();
+
+  const text = buildJson();
   pubStatus('Publishing...');
   try {
     const r = await publishFile({ token, repo: prefs.repo, branch: prefs.branch, path: prefs.path, text, message: prefs.msg, baseText: S.baseText, force });
@@ -527,7 +594,7 @@ async function runPublish(force) {
     if (r.status === 'unchanged') {
       pubStatus('GitHub already has exactly these points. Nothing to publish.', 'ok');
     } else {
-      const el = pubStatus(`Published ${placed} feature${placed > 1 ? 's' : ''}. Commit `, 'ok');
+      const el = pubStatus(`Published ${placed.length} feature${placed.length > 1 ? 's' : ''}. Commit `, 'ok');
       const a = document.createElement('a');
       a.href = r.commitUrl || '#'; a.target = '_blank'; a.rel = 'noopener';
       a.textContent = (r.commitSha || '').slice(0, 7) || 'view';

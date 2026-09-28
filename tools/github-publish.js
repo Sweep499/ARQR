@@ -66,3 +66,54 @@ export async function publishFile({ token, repo, branch, path, text, message, ba
   const done = await put.json();
   return { status: 'committed', commitUrl: done.commit?.html_url, commitSha: done.commit?.sha };
 }
+
+const MAX_BINARY_BYTES = 1_000_000; // GitHub's "create/update file contents" endpoint is documented for files under 1MB;
+                                     // larger ones need the separate Git Data (blob) API, which this does not use
+
+const bytesToB64 = (bytes) => {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return btoa(bin);
+};
+
+// Creates or replaces a binary file (a PDF, an image, ...) at `path` with the bytes of `blob`. Unlike
+// publishFile, a missing file is created rather than treated as an error - most binary assets are new the
+// first time - and there is no "changed since we started" guard: unlike a shared JSON file, attaching a
+// file in the UI is always a deliberate choice to put exactly that file at that path, so it always wins.
+// Resolves { status: 'unchanged' } or { status: 'committed', commitUrl, commitSha }.
+export async function publishBinary({ token, repo, branch, path, blob, message }) {
+  if (!token) throw new PublishError('auth', 'Paste a GitHub token first.');
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new PublishError('other', 'The repository should look like owner/name.');
+  if (blob.size > MAX_BINARY_BYTES) {
+    throw new PublishError('other', `That file is ${(blob.size / 1e6).toFixed(1)} MB; GitHub's simple file API only takes files under 1 MB this way. Compress it, or host it elsewhere and use a link instead.`);
+  }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const content = bytesToB64(bytes);
+  const url = `${API}/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}`;
+
+  const get = await call(`${url}?ref=${encodeURIComponent(branch)}`, token);
+  let sha, remoteB64 = null;
+  if (get.status === 404) {
+    sha = undefined; // nothing there yet: this upload creates it
+  } else if (get.status === 401) {
+    throw new PublishError('auth', 'GitHub did not accept the token. It may be wrong, expired or revoked.');
+  } else if (!get.ok) {
+    throw new PublishError('other', `GitHub answered ${get.status} when reading ${path}.`);
+  } else {
+    const remote = await get.json();
+    sha = remote.sha;
+    remoteB64 = (remote.content || '').replace(/\s/g, '');
+  }
+
+  if (remoteB64 === content) return { status: 'unchanged' };
+
+  const body = { message, content, branch };
+  if (sha) body.sha = sha;
+  const put = await call(url, token, { method: 'PUT', body: JSON.stringify(body) });
+  if (put.status === 401) throw new PublishError('auth', 'GitHub did not accept the token.');
+  if (put.status === 403 || put.status === 404) throw new PublishError('auth', 'The token can read this repository but not write to it. Give it "Contents: read and write".');
+  if (put.status === 409 || put.status === 422) throw new PublishError('conflict', 'The file changed on GitHub while publishing. Try again.');
+  if (!put.ok) throw new PublishError('other', `GitHub answered ${put.status} when writing ${path}.`);
+  const done = await put.json();
+  return { status: 'committed', commitUrl: done.commit?.html_url, commitSha: done.commit?.sha };
+}

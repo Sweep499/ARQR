@@ -35,6 +35,7 @@
     #form label { color: var(--dim); font-size: 12px; }
     #form label.chk { display: block; color: var(--fg); font-size: 13px; }
     #form label.chk input { width: auto; margin: 0 6px 0 0; vertical-align: middle; }
+    #fPdfName, #fPdfClear { margin-left: 6px; }
     .front { padding: 8px 10px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
     .front label { color: var(--dim); font-size: 12px; }
     .front .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -93,6 +94,12 @@
         <div><label for="fTitle">Title</label><input id="fTitle" type="text"></div>
         <div><label for="fText">Text shown in the popup</label><textarea id="fText"></textarea></div>
         <div><label for="fUrl">Link (Open feature page)</label><input id="fUrl" type="url" placeholder="https://"></div>
+        <div>
+          <label for="fPdf">Or attach a PDF <span class="dim">(uploaded to the repo when you publish, in place of the link above)</span></label>
+          <label class="btn" style="display:inline-block"><input id="fPdf" type="file" accept="application/pdf" hidden>Choose PDF&hellip;</label>
+          <span id="fPdfName" class="dim"></span>
+          <button type="button" id="fPdfClear" hidden>Remove</button>
+        </div>
         <label class="chk"><input id="fEmbed" type="checkbox" checked> Show the page inside the app <span class="dim">(untick if the site refuses, e.g. silen.com; it then opens in a new tab)</span></label>
       </div>
       <div class="front">
@@ -118,7 +125,7 @@
   <dialog id="pub">
     <form id="pubForm" method="dialog">
       <h2>Publish to GitHub</h2>
-      <p class="dim">Saves these points as <code>data/pod.json</code> in the repository. The live sites use the new points about a minute later.</p>
+      <p class="dim">Saves these points as <code>data/pod.json</code> in the repository, uploading any attached PDFs first (each under 1&nbsp;MB). The live sites use the new points about a minute later.</p>
       <label>Repository<input id="pubRepo" type="text" autocomplete="off" spellcheck="false"></label>
       <div class="two">
         <label>Branch<input id="pubBranch" type="text" autocomplete="off" spellcheck="false"></label>

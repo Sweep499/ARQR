@@ -212,8 +212,15 @@ numbered dots without measuring anything by hand:
 3. The list starts with what is in `data/pod.json`. Select a feature (or "+ Add feature"), then click its spot
    on the picture. Fill in its title, popup text and link on the right. Drag a dot to move it; "grid" shows
    the front frame divided into tenths.
-4. Save it: **"Publish to GitHub"** commits the points straight to `data/pod.json` on `main`, and the live sites
-   use them about a minute later. (Or "Download pod.json" / "Copy JSON" and replace the file yourself.)
+4. Instead of a link you can attach a PDF directly: **"Choose PDF…"** picks a file from your computer or phone
+   (under 1 MB). It is not uploaded right away — the name shows "(uploads on publish)" until you actually
+   publish, at which point it is added to the repository at `data/docs/<feature-id>.pdf` and the feature's link
+   is set to that file's address automatically. "Remove" cancels a pending attachment before it uploads;
+   choosing a PDF disables the link field (only one or the other applies), and picking a new PDF later replaces
+   the one already uploaded.
+5. Save it: **"Publish to GitHub"** uploads any attached PDFs first, then commits the points to `data/pod.json`
+   on `main`; the live sites use them about a minute later. (Or "Download pod.json" / "Copy JSON" and replace
+   the file yourself — in that case a PDF you attached is not uploaded, since only "Publish to GitHub" does that.)
 
 **Publishing needs a GitHub token**, because a web page cannot write to a repository on its own. In the dialog,
 click "How do I get a token?": create a *fine-grained* token limited to this one repository with
@@ -232,7 +239,7 @@ You can edit `data/pod.json` by hand, or use the placement page above. Each hots
 | field | meaning |
 |---|---|
 | `title`, `text` | shown in the popup |
-| `url` | opened by the "Open feature page" button, inside the app (see below) |
+| `url` | opened by the "Open feature page" button, inside the app (see below); a PDF attached in the placement page ends up here as a link to `data/docs/<id>.pdf` |
 | `x`, `y` | position on the pod's front frame: `x` 0 = left edge, 1 = right edge; `y` 0 = top, 1 = bottom |
 | `embed` | optional. `false` opens the link in a new tab instead of inside the app (see below) |
 
